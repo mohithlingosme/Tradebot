@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  market_data_ingestion:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - ALPHAVANTAGE_API_KEY=YOUR_ALPHAVANTAGE_API_KEY
+      - KITE_API_KEY=YOUR_KITE_API_KEY
+      - KITE_API_SECRET=YOUR_KITE_API_SECRET

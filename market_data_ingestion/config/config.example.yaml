@@ -1,0 +1,37 @@
+# Example configuration for market data ingestion system
+
+database:
+  db_path: "market_data.db"  # Path to SQLite database
+
+providers:
+  yfinance:
+    is_active: True
+    rate_limit_per_minute: 100  # Adjust based on yfinance usage
+  alphavantage:
+    is_active: True
+    api_key: "${ALPHAVANTAGE_API_KEY}"
+    rate_limit_per_minute: 5  # Alpha Vantage free tier limit
+  kite_ws:
+    is_active: True
+    api_key: "${KITE_API_KEY}"
+    api_secret: "${KITE_API_SECRET}"
+    websocket_url: "ws://localhost:8765"  # Replace with real Kite websocket URL
+    reconnect_interval: 5  # Reconnect interval in seconds
+    heartbeat_interval: 30 # Heartbeat interval in seconds
+
+instruments:
+  - symbol: "RELIANCE.NS"
+    provider: "yfinance"
+  - symbol: "TCS.NS"
+    provider: "yfinance"
+  - symbol: "AAPL"
+    provider: "alphavantage"
+
+pipelines:
+  realtime:
+    enabled: True
+  backfill:
+    enabled: True
+
+logging:
+  level: "INFO"

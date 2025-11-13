@@ -1,0 +1,44 @@
+# Default configuration for market data ingestion system
+
+database:
+  dsn: "postgresql://user:password@localhost:5432/market_data"
+  min_connections: 1
+  max_connections: 10
+
+providers:
+  polygon:
+    base_url: "https://api.polygon.io"
+    api_key: "${POLYGON_API_KEY}"
+    rate_limit_per_minute: 5
+  binance:
+    base_url: "https://api.binance.com"
+    api_key: "${BINANCE_API_KEY}"
+    api_secret: "${BINANCE_API_SECRET}"
+    rate_limit_per_minute: 1200
+
+instruments:
+  - symbol: "AAPL"
+    provider: "polygon"
+    instrument_type: "stock"
+  - symbol: "BTCUSDT"
+    provider: "binance"
+    instrument_type: "crypto"
+
+pipelines:
+  realtime:
+    enabled: true
+    batch_size: 100
+    flush_interval_seconds: 5
+  backfill:
+    enabled: true
+    chunk_size_days: 30
+    max_concurrent_chunks: 3
+
+monitoring:
+  prometheus_port: 8000
+  health_check_interval_seconds: 30
+  metrics_enabled: true
+
+logging:
+  level: "INFO"
+  format: "json"
