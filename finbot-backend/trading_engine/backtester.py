@@ -16,7 +16,7 @@ import json
 import os
 
 from .strategy_manager import StrategyManager, BaseStrategy
-from ..risk_management.portfolio_manager import PortfolioManager
+from risk_management.portfolio_manager import PortfolioManager
 
 logger = logging.getLogger(__name__)
 

@@ -8,11 +8,15 @@ import numpy as np
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
-from finbot_backend.trading_engine.strategy_manager import StrategyManager, BaseStrategy
-from finbot_backend.trading_engine.strategies import AdaptiveRSIMACDStrategy
-from finbot_backend.trading_engine.backtester import Backtester, BacktestConfig, BacktestMode
-from finbot_backend.risk_management.portfolio_manager import PortfolioManager
-from finbot_backend.monitoring.logger import StructuredLogger, LogLevel, Component
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'finbot-backend'))
+
+from trading_engine.strategy_manager import StrategyManager, BaseStrategy
+from trading_engine.strategies.adaptive_rsi_macd_strategy import AdaptiveRSIMACDStrategy
+from trading_engine.backtester import Backtester, BacktestConfig, BacktestMode
+from risk_management.portfolio_manager import PortfolioManager
+from monitoring.logger import StructuredLogger, LogLevel, Component
 
 class MockStrategy(BaseStrategy):
     """Mock strategy for testing"""
@@ -174,7 +178,7 @@ class TestBacktester(unittest.TestCase):
         self.assertIsNotNone(self.backtester.config)
         self.assertIsNotNone(self.backtester.portfolio_manager)
 
-    @patch('finbot_backend.trading_engine.backtester.Backtester._execute_trade')
+    @patch('trading_engine.backtester.Backtester._execute_trade')
     def test_run_backtest(self, mock_execute):
         """Test running a backtest"""
         mock_execute.return_value = Mock(pnl=1000, quantity=10, price=100, commission=10)
@@ -195,6 +199,78 @@ class TestBacktester(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertIsInstance(result.total_trades, int)
         self.assertIsInstance(result.total_return, float)
+
+class TestLiveTradingEngine(unittest.TestCase):
+
+    def setUp(self):
+        from trading_engine import LiveTradingConfig, TradingMode, LiveTradingEngine
+
+        self.config = LiveTradingConfig(
+            mode=TradingMode.SIMULATION,
+            symbols=["AAPL"],
+            update_interval_seconds=1.0  # Fast for testing
+        )
+        self.portfolio_manager = PortfolioManager({
+            'initial_cash': 100000,
+            'max_drawdown': 0.15,
+            'max_daily_loss': 0.05,
+            'max_position_size': 0.10
+        })
+        self.engine = LiveTradingEngine(
+            config=self.config,
+            strategy_manager=StrategyManager(),
+            portfolio_manager=self.portfolio_manager
+        )
+
+    def test_initialization(self):
+        """Test live trading engine initialization"""
+        self.assertIsNotNone(self.engine.config)
+        self.assertIsNotNone(self.engine.strategy_manager)
+        self.assertIsNotNone(self.engine.portfolio_manager)
+        self.assertEqual(self.engine.state.value, "stopped")
+
+    def test_get_engine_status(self):
+        """Test getting engine status"""
+        status = self.engine.get_engine_status()
+        self.assertIsInstance(status, dict)
+        self.assertIn('state', status)
+        self.assertIn('mode', status)
+        self.assertIn('symbols', status)
+
+    def test_get_execution_history(self):
+        """Test getting execution history"""
+        history = self.engine.get_execution_history()
+        self.assertIsInstance(history, list)
+
+    def test_generate_mock_data(self):
+        """Test mock data generation"""
+        data = self.engine._generate_mock_data("AAPL")
+        self.assertIsInstance(data, dict)
+        self.assertIn('symbol', data)
+        self.assertIn('close', data)
+        self.assertIn('timestamp', data)
+
+    def test_calculate_position_size(self):
+        """Test position size calculation"""
+        size = self.engine._calculate_position_size("AAPL", "buy", 0.8)
+        self.assertIsInstance(size, int)
+        self.assertGreaterEqual(size, 0)
+
+    def test_check_signal_risk_limits(self):
+        """Test risk limit checking"""
+        from trading_engine import ExecutionResult
+
+        result = ExecutionResult(
+            strategy_name="test",
+            symbol="AAPL",
+            signal="buy",
+            confidence=0.8,
+            execution_time_ms=100.0,
+            success=True
+        )
+
+        can_trade = self.engine._check_signal_risk_limits(result)
+        self.assertIsInstance(can_trade, bool)
 
 class TestStructuredLogger(unittest.TestCase):
 
@@ -220,6 +296,100 @@ class TestStructuredLogger(unittest.TestCase):
 
         metrics = self.logger.get_metrics_summary()
         self.assertGreater(metrics['avg_strategy_execution_time'], 0)
+
+class TestIntegration(unittest.TestCase):
+    """Integration tests for trading engine components"""
+
+    def setUp(self):
+        from trading_engine import (
+            StrategyManager, AdaptiveRSIMACDStrategy,
+            LiveTradingConfig, TradingMode, LiveTradingEngine
+        )
+
+        # Setup strategy
+        self.strategy_manager = StrategyManager()
+        config = {
+            'name': 'test_adaptive_rsi_macd',
+            'strategy_params': {
+                'rsi_period': 14,
+                'macd_fast': 12,
+                'macd_slow': 26,
+                'macd_signal': 9
+            }
+        }
+        self.strategy_manager.load_strategy('test_strategy', AdaptiveRSIMACDStrategy, config)
+
+        # Setup portfolio
+        self.portfolio_manager = PortfolioManager({
+            'initial_cash': 100000,
+            'max_drawdown': 0.15,
+            'max_daily_loss': 0.05,
+            'max_position_size': 0.10
+        })
+
+        # Setup live engine
+        self.live_config = LiveTradingConfig(
+            mode=TradingMode.SIMULATION,
+            symbols=["AAPL"],
+            update_interval_seconds=1.0
+        )
+        self.live_engine = LiveTradingEngine(
+            config=self.live_config,
+            strategy_manager=self.strategy_manager,
+            portfolio_manager=self.portfolio_manager
+        )
+
+    def test_strategy_to_portfolio_integration(self):
+        """Test integration between strategy signals and portfolio updates"""
+        # Load and activate strategy
+        success = self.strategy_manager.activate_strategy('test_strategy')
+        self.assertTrue(success)
+
+        # Simulate market data
+        market_data = {
+            'timestamp': datetime.now(),
+            'open': 95,
+            'high': 105,
+            'low': 95,
+            'close': 98,
+            'volume': 1000
+        }
+
+        # Execute strategy
+        result = self.strategy_manager.execute_strategy('test_strategy', market_data)
+        self.assertIsNotNone(result)
+
+        # If signal generated, test portfolio update
+        if result['signal'] != 'hold':
+            success = self.portfolio_manager.update_position(
+                "AAPL", 10, 100.0, result['signal']
+            )
+            self.assertTrue(success)
+
+            # Check portfolio updated
+            positions = self.portfolio_manager.get_position_summary()
+            self.assertIsInstance(positions, list)
+
+    def test_live_engine_data_flow(self):
+        """Test data flow in live trading engine"""
+        # Test mock data generation
+        data = self.live_engine._generate_mock_data("AAPL")
+        self.assertIsInstance(data, dict)
+        self.assertEqual(data['symbol'], "AAPL")
+
+        # Test position size calculation
+        size = self.live_engine._calculate_position_size("AAPL", "buy", 0.8)
+        self.assertIsInstance(size, int)
+
+    def test_error_handling(self):
+        """Test error handling in components"""
+        # Test invalid strategy execution
+        result = self.strategy_manager.execute_strategy('nonexistent', {})
+        self.assertIsNone(result)
+
+        # Test portfolio with invalid data
+        success = self.portfolio_manager.update_position("AAPL", -1, -100.0, "invalid")
+        self.assertFalse(success)
 
 if __name__ == '__main__':
     unittest.main()

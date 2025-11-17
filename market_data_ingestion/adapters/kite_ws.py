@@ -102,6 +102,12 @@ class KiteWebSocketAdapter:
             # Normalize the data
             normalized_data = self._normalize_data(data, "kite")
 
+            # Send to aggregator
+            from market_data_ingestion.core.aggregator import TickAggregator
+            aggregator = TickAggregator()
+            await aggregator.aggregate_tick(normalized_data)
+            await aggregator.flush_candles()  # Flush immediately for demo
+
             # Process the normalized data (e.g., send to a channel for aggregation)
             # For now, just print the normalized data
             print(f"Normalized data: {normalized_data}")

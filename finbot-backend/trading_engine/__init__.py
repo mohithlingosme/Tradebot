@@ -11,6 +11,7 @@ This package contains the core trading engine components:
 from .strategy_manager import StrategyManager, BaseStrategy, SignalStrength, StrategyPerformance
 from .backtester import Backtester, BacktestConfig, BacktestResult, BacktestMode, Trade
 from .strategies import AdaptiveRSIMACDStrategy, StrategyConfig, SignalType
+from .live_trading_engine import LiveTradingEngine, LiveTradingConfig, TradingMode, EngineState, ExecutionResult
 
 __all__ = [
     'StrategyManager',
@@ -24,5 +25,10 @@ __all__ = [
     'Trade',
     'AdaptiveRSIMACDStrategy',
     'StrategyConfig',
-    'SignalType'
+    'SignalType',
+    'LiveTradingEngine',
+    'LiveTradingConfig',
+    'TradingMode',
+    'EngineState',
+    'ExecutionResult'
 ]

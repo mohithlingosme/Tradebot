@@ -1,125 +1,281 @@
-# Market Data Ingestion System
+# Finbot - Autonomous Trading System
 
-## Overview
-
-This system ingests market data from various providers, aggregates it, and stores it in a database. It supports historical backfilling and real-time data ingestion.
+A comprehensive autonomous trading system built with Python, featuring real-time market data ingestion, advanced technical indicators, risk management, and a modern web dashboard.
 
 ## Features
 
--   Fetches historical intraday and daily bars from low-cost/free providers (yfinance, AlphaVantage, public CSVs).
--   Ingests real-time ticks/quotes from broker websocket APIs (primary target: Zerodha Kite or Upstox style websocket) and converts ticks to 1s/1m candles.
--   Persists normalized data into a local SQLite DB for prototyping and a Postgres-ready schema for production.
--   Modular design allows adding new providers (exchanges/brokers) as adapters.
--   Runnable on a cheap VPS / local machine and packaged via Docker + docker-compose.
+- **Market Data Ingestion**: Real-time and historical data from multiple sources (Yahoo Finance, Alpha Vantage, Polygon)
+- **Technical Indicators**: 117+ indicators implemented for comprehensive analysis
+- **Trading Strategies**: Adaptive RSI-MACD strategy with backtesting capabilities
+- **Risk Management**: Portfolio optimization and position sizing
+- **Web Dashboard**: Streamlit-based interface for monitoring and control
+- **API Services**: REST and WebSocket endpoints for external integrations
+- **Authentication**: JWT-based secure API access
+- **CI/CD**: Automated testing, building, and deployment
+- **Monitoring**: Health checks, metrics, and alerting
 
-## Architecture
-
-```
-[Data Providers] --> [Data Ingestion] --> [Data Aggregation] --> [Data Storage]
-```
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
 
--   Python 3.11+
--   Docker (optional, for containerized deployment)
+- Python 3.8+
+- Docker and Docker Compose
+- PostgreSQL (optional, for persistent storage)
 
 ### Installation
 
-1.  Clone the repository:
+1. Clone the repository:
+```bash
+git clone https://github.com/mohithlingosme/blackboxai-finbot.git
+cd blackboxai-finbot
+```
 
-    ```bash
-    git clone https://github.com/yourusername/market-data-ingestion.git
-    cd market-data-ingestion
-    ```
+2. Copy environment configuration:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
 
-2.  Create a virtual environment:
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+pip install -e finbot-backend/
+```
 
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
+4. Run the application:
+```bash
+# Start all services
+docker-compose up
 
-3.  Install dependencies:
+# Or run backend only
+cd finbot-backend
+uvicorn api.main:app --reload
+```
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+## API Documentation
 
-4.  Set up environment variables:
+The FastAPI backend provides comprehensive REST and WebSocket endpoints:
 
-    ```bash
-    cp market_data_ingestion/.env.example market_data_ingestion/.env
-    # Edit market_data_ingestion/.env with your API keys
-    ```
+### Authentication
+```bash
+# Login
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
 
-### Configuration
+# Use the returned token in subsequent requests
+curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  http://localhost:8000/protected
+```
 
--   Configure the system by editing `market_data_ingestion/config/config.example.yaml`.
--   Enable/disable providers and set API keys in `market_data_ingestion/.env`.
+### Key Endpoints
+- `GET /health` - System health check
+- `GET /metrics` - Performance metrics
+- `POST /trades` - Place trade orders
+- `GET /portfolio` - Portfolio summary
+- `POST /strategies/{action}` - Strategy management
+- `WebSocket /ws/trades` - Real-time trade updates
 
-### Running Locally
+## Deployment
 
-1.  Run database migrations:
+### Development
+```bash
+docker-compose -f docker-compose.dev.yml up
+```
 
-    ```bash
-    python -m src.cli migrate
-    ```
+### Staging
+```bash
+docker-compose -f docker-compose.staging.yml up
+```
 
-2.  Run backfill:
+### Production
+```bash
+docker-compose -f docker-compose.prod.yml up
+```
 
-    ```bash
-    python -m src.cli backfill --symbols RELIANCE.NS TCS.NS --period 7d --interval 1m
-    ```
+### Rollback
+```bash
+# Rollback to previous version
+./deployment/rollback.sh --previous
 
-3.  Run realtime ingestion:
+# Rollback to specific tag
+./deployment/rollback.sh --tag v1.2.3
+```
 
-    ```bash
-    python -m src.cli realtime --symbols RELIANCE.NS --provider kite_ws
-    ```
+## Configuration
 
-### Running with Docker
+### Environment Variables
 
-1.  Build and run with Docker Compose:
+Copy `.env.example` to `.env` and configure:
 
-    ```bash
-    docker-compose up --build
-    ```
+```bash
+# Authentication
+JWT_SECRET_KEY=your-secret-key
 
-## Example Queries
+# Database
+DATABASE_URL=postgresql://user:pass@localhost:5432/finbot
 
--   Fetch last 10 candles for a symbol:
+# Trading
+TRADING_MODE=simulation  # simulation, paper, live
+INITIAL_CASH=100000
 
-    ```sql
-    SELECT * FROM candles WHERE symbol = 'RELIANCE.NS' ORDER BY ts_utc DESC LIMIT 10;
-    ```
+# Risk Management
+MAX_DRAWDOWN=0.15
+MAX_DAILY_LOSS=0.05
+```
 
-## Cost / Scaling Notes
+### Environment-Specific Configs
 
--   SQLite is used by default for prototyping.
--   To switch to Postgres, update the database connection string in `market_data_ingestion/config/config.example.yaml` and uncomment the Postgres schema in `market_data_ingestion/migrations/init.sql`.
--   For small symbol sets, a cheap VPS with <1 CPU and <512MB RAM should be sufficient.
--   For larger symbol sets, consider scaling the database and using a message queue for data ingestion.
+- `finbot-backend/config/` - Environment-specific configurations
+- Staging and production configs override defaults
 
-## TODOs
+## Development
 
--   Implement backfill logic in `src/cli.py`.
--   Implement realtime ingestion logic in `src/cli.py`.
--   Implement database migration logic in `src/cli.py`.
--   Implement tests for adapters, aggregator, and DB writes.
--   Implement a mock websocket server for demo in `adapters/kite_ws.py`.
--   Add comprehensive error handling and logging.
--   Implement a tiny REST endpoint /candles?symbol=RELIANCE.NS&interval=1m&limit=50 that returns last N candles (Flask/FastAPI minimal).
--   Provide Postman collection or curl example in README for basic queries.
--   Provide a small sample CSV dataset (1–2 symbols, minute bars) used for initial backfill demo.
+### Running Tests
 
-## Extension Points
+```bash
+# Run all tests
+python -m pytest tests/ -v --cov=finbot
 
--   Adding orderbook data.
--   Adding option chain parser.
--   Adding exchange-level feeds.
+# Run specific test file
+python -m pytest tests/unit/test_indicators.py -v
+
+# Run with coverage
+python -m pytest --cov=finbot --cov-report=html
+```
+
+### Code Quality
+
+```bash
+# Linting
+flake8 .
+
+# Type checking
+mypy .
+
+# Formatting
+black .
+isort .
+```
+
+### API Testing
+
+```bash
+# Start the API server
+cd finbot-backend
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Test endpoints
+curl http://localhost:8000/health
+curl http://localhost:8000/docs  # Interactive API docs
+```
+
+## Monitoring
+
+### Health Checks
+- `GET /health` - Comprehensive system health
+- Database connectivity
+- External API status
+- Service availability
+
+### Metrics
+- `GET /metrics` - Performance metrics
+- Trading statistics
+- System resources
+- Error rates
+
+### Logging
+- Structured logging with configurable levels
+- Log rotation and retention
+- External log aggregation support
+
+## Security
+
+- JWT-based authentication
+- CORS protection
+- Input validation
+- Secure environment variable handling
+- Regular security updates
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Add tests for new functionality
+5. Ensure all tests pass
+6. Update documentation
+7. Commit your changes (`git commit -m 'Add amazing feature'`)
+8. Push to the branch (`git push origin feature/amazing-feature`)
+9. Open a Pull Request
+
+### Development Workflow
+
+1. **Setup**: Follow the installation steps above
+2. **Development**: Make changes with tests
+3. **Testing**: Run the full test suite
+4. **Documentation**: Update docs for any API changes
+5. **PR**: Create a pull request with a clear description
+
+## Project Structure
+
+```
+finbot/
+├── .github/workflows/         # CI/CD pipelines
+├── market_data_ingestion/     # Data ingestion pipeline
+├── finbot-backend/           # Core trading engine and API
+│   ├── api/                   # FastAPI endpoints
+│   ├── config/               # Configuration management
+│   ├── trading_engine/       # Trading logic
+│   ├── risk_management/      # Risk controls
+│   └── indicators/           # Technical indicators
+├── finbot-frontend/          # Web dashboard
+├── tests/                    # Unit and integration tests
+├── docs/                     # Documentation
+├── deployment/               # Deployment configurations
+├── .env.example             # Environment template
+└── docker-compose.yml       # Container orchestration
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failed**
+   ```bash
+   # Check PostgreSQL is running
+   docker-compose ps db
+
+   # Reset database
+   docker-compose down -v
+   docker-compose up db
+   ```
+
+2. **API Authentication Issues**
+   ```bash
+   # Check JWT secret in .env
+   echo $JWT_SECRET_KEY
+
+   # Test login endpoint
+   curl -X POST "http://localhost:8000/auth/login" \
+     -d '{"username": "admin", "password": "admin123"}'
+   ```
+
+3. **Docker Build Issues**
+   ```bash
+   # Clean Docker cache
+   docker system prune -a
+
+   # Rebuild without cache
+   docker-compose build --no-cache
+   ```
 
 ## License
 
-MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/mohithlingosme/blackboxai-finbot/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/mohithlingosme/blackboxai-finbot/discussions)
+- **Documentation**: [Wiki](https://github.com/mohithlingosme/blackboxai-finbot/wiki)

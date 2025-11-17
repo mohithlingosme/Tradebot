@@ -85,8 +85,22 @@ class TickAggregator:
         """Flushes candles for a specific interval to the storage layer."""
         for symbol, interval_candles in candles.items():
             for bucket_key, candle in interval_candles.items():
-                # TODO: Send candle to storage layer
-                logger.info(f"Flushing {interval} candle for {symbol} at {bucket_key}: {candle}")
+                # Send candle to storage layer
+                from market_data_ingestion.core.storage import DataStorage
+                import yaml
+                import os
+
+                # Load config and initialize storage
+                config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.example.yaml')
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+
+                storage = DataStorage(config['database']['db_path'])
+                await storage.connect()
+                await storage.insert_candle(candle)
+                await storage.disconnect()
+
+                logger.info(f"Flushed {interval} candle for {symbol} at {bucket_key}: {candle}")
 
             # Clear the candles for the interval
             candles[symbol].clear()
