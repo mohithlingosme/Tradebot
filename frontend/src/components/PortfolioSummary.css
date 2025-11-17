@@ -1,0 +1,144 @@
+.portfolio-summary {
+  padding: 20px;
+}
+
+.portfolio-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.portfolio-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.refresh-button {
+  padding: 8px 16px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.3s;
+}
+
+.refresh-button:hover {
+  background: #5568d3;
+}
+
+.portfolio-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.metric-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #667eea;
+}
+
+.metric-card.positive {
+  border-left-color: #28a745;
+}
+
+.metric-card.negative {
+  border-left-color: #dc3545;
+}
+
+.metric-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.metric-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+}
+
+.metric-percent {
+  font-size: 14px;
+  margin-left: 8px;
+  font-weight: 500;
+}
+
+.positions-table {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.positions-table h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+}
+
+.positions-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.positions-table th {
+  background: #f8f9fa;
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.positions-table td {
+  padding: 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.positions-table tr:hover {
+  background: #f8f9fa;
+}
+
+.symbol-cell {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.positive {
+  color: #28a745;
+}
+
+.negative {
+  color: #dc3545;
+}
+
+.loading, .error, .no-data {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.error {
+  color: #dc3545;
+}
+
+@media (max-width: 768px) {
+  .portfolio-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .positions-table {
+    overflow-x: auto;
+  }
+
+  .positions-table table {
+    min-width: 600px;
+  }
+}
+

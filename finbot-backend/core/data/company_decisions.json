@@ -1,0 +1,23 @@
+[
+  {
+    "company": "Apple",
+    "title": "Capital Returns Program Expansion",
+    "year": 2023,
+    "summary": "Apple authorized an additional $90B share repurchase and raised dividends despite macro headwinds, signaling confidence in long-term cash generation and services growth.",
+    "tags": ["buyback", "capital-allocation", "cash-flow"]
+  },
+  {
+    "company": "Tesla",
+    "title": "Price Cuts to Defend EV Share",
+    "year": 2024,
+    "summary": "Tesla reduced Model 3/Y prices globally to maintain market share, prioritizing scale and software revenue over short-term margins.",
+    "tags": ["pricing", "growth", "margin"]
+  },
+  {
+    "company": "Microsoft",
+    "title": "Activision Blizzard Acquisition",
+    "year": 2023,
+    "summary": "Microsoft closed the $68.7B Activision deal to strengthen its gaming and AI ecosystem, focusing on subscription flywheel and cloud integration.",
+    "tags": ["m&a", "gaming", "ai"]
+  }
+]

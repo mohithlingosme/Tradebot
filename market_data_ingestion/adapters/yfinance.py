@@ -1,16 +1,28 @@
+import asyncio
+import logging
 import yfinance as yf
 import pandas as pd
 from typing import Dict, Any, Optional
+import tenacity
+from market_data_ingestion.src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class YFinanceAdapter:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.rate_limit_delay = 60 / config.get("rate_limit_per_minute", 100)  # Delay in seconds
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
+        retry=tenacity.retry_if_exception_type(Exception),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING)
+    )
     async def fetch_historical_data(
         self, symbol: str, start: str, end: str, interval: str = "1m"
     ) -> list[Dict[str, Any]]:
-        '''Fetches historical data from yfinance.
+        '''Fetches historical data from yfinance with rate limiting.
 
         Args:
             symbol (str): The symbol to fetch data for (e.g., "RELIANCE.NS").
@@ -21,6 +33,9 @@ class YFinanceAdapter:
         Returns:
             list[Dict[str, Any]]: A list of normalized data dictionaries.
         '''
+        # Rate limiting: wait before making request
+        await asyncio.sleep(self.rate_limit_delay)
+
         try:
             # Download data from yfinance
             data = yf.download(symbol, start=start, end=end, interval=interval)
@@ -29,7 +44,7 @@ class YFinanceAdapter:
             normalized_data = self._normalize_data(symbol, data, interval, "yfinance")
             return normalized_data
         except Exception as e:
-            print(f"Error fetching data for {symbol}: {e}")
+            logger.error(f"Error fetching data for {symbol}: {e}")
             return []
 
     def _normalize_data(self, symbol: str, data: pd.DataFrame, interval: str, provider: str) -> list[Dict[str, Any]]:
@@ -51,11 +66,11 @@ class YFinanceAdapter:
                     "symbol": symbol,
                     "ts_utc": str(index),
                     "type": "candle",
-                    "open": float(row["Open"].iloc[0]),
-                    "high": float(row["High"].iloc[0]),
-                    "low": float(row["Low"].iloc[0]),
-                    "close": float(row["Close"].iloc[0]),
-                    "volume": float(row["Volume"].iloc[0]),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": float(row["Volume"]),
                     "provider": provider,
                     "meta": {},
                 }

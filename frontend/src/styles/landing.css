@@ -1,0 +1,81 @@
+:root {
+  --color-bg: #020c1b;
+  --color-accent: #1de9b6;
+  --color-amber: #ffb300;
+}
+
+.landing {
+  min-height: 100vh;
+  background: radial-gradient(circle at top right, rgba(29, 233, 182, 0.2), transparent),
+    var(--color-bg);
+  color: #fff;
+  padding: 4rem clamp(1rem, 4vw, 6rem);
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.landing .hero {
+  max-width: 768px;
+}
+
+.landing .eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-size: 0.85rem;
+  color: var(--color-amber);
+}
+
+.landing h1 {
+  font-size: clamp(2.5rem, 4vw, 4rem);
+  margin-bottom: 1rem;
+}
+
+.landing .subhead {
+  font-size: 1.2rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.cta-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn {
+  border-radius: 999px;
+  padding: 0.85rem 1.85rem;
+  text-decoration: none;
+  font-weight: 600;
+  transition: transform 150ms ease;
+}
+
+.btn.primary {
+  background: var(--color-accent);
+  color: #020c1b;
+}
+
+.btn.ghost {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #fff;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+}
+
+.features {
+  margin-top: 4rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.features article {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.features h3 {
+  color: var(--color-accent);
+}

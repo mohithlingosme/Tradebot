@@ -70,6 +70,30 @@ def load_config(env: str = None) -> Dict[str, Any]:
             "metrics_retention_days": int(os.getenv("METRICS_RETENTION_DAYS", "30")),
             "enable_prometheus": os.getenv("ENABLE_PROMETHEUS_METRICS", "false").lower() == "true",
             "prometheus_port": int(os.getenv("PROMETHEUS_PORT", "9090"))
+        },
+        "news": {
+            "database_url": os.getenv("NEWS_DATABASE_URL", os.getenv("DATABASE_URL", "sqlite:///news.db")),
+            "enable_ai": os.getenv("NEWS_ENABLE_AI", "true").lower() == "true",
+            "max_articles": int(os.getenv("NEWS_MAX_ARTICLES", "25")),
+            "sources": [
+                {
+                    "name": "WSJ Markets",
+                    "type": "rss",
+                    "url": os.getenv("NEWS_SOURCE_WSJ", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
+                    "symbols": ["AAPL", "MSFT", "NVDA"]
+                },
+                {
+                    "name": "Finviz",
+                    "type": "rss",
+                    "url": os.getenv("NEWS_SOURCE_FINVIZ", "https://finviz.com/feed.ashx"),
+                    "symbols": ["SPY", "QQQ"]
+                }
+            ],
+            "scheduler": {
+                "enabled": os.getenv("NEWS_SCHEDULER_ENABLED", "true").lower() == "true",
+                "run_time": os.getenv("NEWS_SCHEDULER_RUN_TIME", "06:00"),
+                "timezone": os.getenv("NEWS_SCHEDULER_TIMEZONE", "UTC")
+            }
         }
     }
 

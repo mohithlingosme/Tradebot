@@ -1,86 +1,110 @@
-# Implementation TODO for Market Data Ingestion Completion
+# Finbot Product Development – Pending Tasks Only
+A refined roadmap containing only incomplete items.
 
-## Overview
-Complete remaining P0 critical tasks for market data ingestion system.
+---
 
-## Remaining Steps
-- [x] Verify /candles and /metrics endpoints functionality (API exists but needs live testing)
-- [x] Add unit tests for CLI commands (basic test structure exists, needs expansion)
-- [x] Add unit tests for adapters (test files exist but minimal coverage)
-- [x] Add unit tests for storage (basic tests exist, needs expansion)
-- [x] Add integration tests for adapters with sample data (integration test structure exists)
-- [x] Add performance tests for ingestion pipeline (not implemented)
-- [x] Integrate with existing finbot-backend structure (separate backend/ and finbot-backend/ directories exist)
+## 🟦 1. Core Product Development
 
-## Completed Tasks
+### 1.2 Backend
+- [ ] Optimize API response times (<150ms target)
 
-### 1. API Endpoint Tests
-- Created `tests/integration/test_api_endpoints.py` with comprehensive tests for:
-  - `/candles` endpoint (success, limits, error cases)
-  - `/metrics` endpoint (Prometheus format verification)
-  - `/health` and `/ready` endpoints
-  - `/symbols` endpoint
+---
 
-### 2. CLI Command Tests
-- Created `tests/unit/test_cli.py` with tests for:
-  - `backfill` command (with symbols and CSV file)
-  - `realtime` command
-  - `migrate` command
-  - `load_symbols_from_csv` utility function
+## 🟦 2. Data Systems
 
-### 3. Adapter Tests
-- Created `tests/unit/test_adapters.py` with tests for:
-  - YFinanceAdapter (fetch, normalize, error handling)
-  - AlphaVantageAdapter (fetch, normalize, context manager)
-  - KiteWebSocketAdapter (authentication, subscription, context manager)
+*(No pending tasks in this section — all major data system items completed.)*
 
-### 4. Storage Tests
-- Created `tests/unit/test_storage.py` with tests for:
-  - Database connection and table creation
-  - Candle insertion (including duplicate handling)
-  - Fetching candles (with limits, multiple symbols)
-  - Health checks
-  - Connection management
+---
 
-### 5. Integration Tests
-- Created `tests/integration/test_adapters_integration.py` with:
-  - End-to-end adapter tests with real storage
-  - Data normalization verification
-  - Error handling tests
-  - Rate limiting tests
+## 🟦 3. AI / ML Systems
 
-### 6. Performance Tests
-- Created `tests/performance/test_ingestion_performance.py` with:
-  - Bulk insert performance tests
-  - Fetch performance tests
-  - Tick aggregation performance tests
-  - Multi-symbol aggregation tests
-  - End-to-end pipeline performance tests
-  - Concurrent operations tests
+### 3.2 Model Integrations
+- [ ] Safety + hallucination-reduction filters (upgrade from basic filters)
 
-### 7. Finbot-Backend Integration
-- Created `finbot-backend/api/market_data.py` with:
-  - `/market-data/candles` endpoint
-  - `/market-data/symbols` endpoint
-  - `/market-data/metrics` endpoint
-- Updated `finbot-backend/api/main.py` to:
-  - Include market data router
-  - Add market data service status to `/status` endpoint
-  - Handle graceful degradation when market_data_ingestion is not available
+---
 
-## Test Files Created
-- `tests/integration/test_api_endpoints.py` - API endpoint integration tests
-- `tests/unit/test_cli.py` - CLI command unit tests
-- `tests/unit/test_adapters.py` - Adapter unit tests
-- `tests/unit/test_storage.py` - Storage unit tests
-- `tests/integration/test_adapters_integration.py` - Adapter integration tests
-- `tests/performance/test_ingestion_performance.py` - Performance tests
+## 🟦 4. Security & Compliance
 
-## Integration Files Created
-- `finbot-backend/api/market_data.py` - Market data API router for finbot-backend
+### 4.1 Security
+- [ ] End-to-end encryption for API communication  
+- [ ] Database encryption for PII fields  
+- [ ] Penetration testing
 
-## Next Steps
-- Run the test suite to verify all tests pass
-- Update CI/CD pipeline to include new tests
-- Document API endpoints in API documentation
-- Consider adding more comprehensive error scenarios
+### 4.2 Legal Compliance
+- [ ] Privacy Policy  
+- [ ] Terms of Service  
+- [ ] Data Protection Policy (DPDP Act)  
+- [ ] SEBI Compliance Review  
+- [ ] Financial Guidance Disclaimer
+
+---
+
+## 🟦 5. Infrastructure & DevOps
+
+### 5.1 Deployment
+- [ ] Staging environment setup  
+- [ ] Production environment setup  
+- [ ] Auto-scaling for high-traffic scenarios
+
+### 5.2 Monitoring
+- [ ] Application monitoring (Grafana / Prometheus)  
+- [ ] Error logging (Sentry)  
+- [ ] Cloud cost monitoring
+
+---
+
+## 🟦 6. Testing
+
+### 6.1 QA
+- [ ] Achieve 80% unit test coverage  
+- [ ] API load testing (expand performance tests)  
+- [ ] UI testing (Cypress)  
+- [ ] UAT testing with selected users
+
+---
+
+## 🟦 7. Business & Monetization
+
+### 7.1 Pricing & Revenue
+- [ ] Define pricing plans (Basic / Pro / Enterprise)  
+- [ ] Integrate payment gateway (Razorpay, UPI/cards)  
+- [ ] Automated invoice generation  
+- [ ] Subscription lifecycle management
+
+### 7.2 Partnerships
+- [ ] Brokerage partnerships (Zerodha, AngelOne)  
+- [ ] Data provider partnerships (if needed)
+
+---
+
+## 🟦 8. Marketing & Launch
+
+### 8.1 Branding
+- [ ] Logo + brand identity  
+- [ ] Website landing page  
+- [ ] Product demo video
+
+### 8.2 Marketing Campaigns
+- [ ] Social media launch  
+- [ ] Email campaign  
+- [ ] Influencer partnerships  
+- [ ] Product Hunt / Reddit launch
+
+---
+
+## 🟦 9. Documentation
+- [ ] Developer guides  
+- [ ] User onboarding guide  
+- [ ] Release notes  
+
+---
+
+## 🟦 10. Final Launch Readiness
+- [ ] Security audit  
+- [ ] Resolve all critical bugs  
+- [ ] Load testing completed  
+- [ ] Monitoring dashboards active  
+- [ ] Press kit ready  
+- [ ] Confirm launch date 🚀  
+
+---

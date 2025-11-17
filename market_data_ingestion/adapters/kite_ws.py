@@ -6,8 +6,10 @@ import time
 from typing import Dict, Any, List
 
 import websockets
+import tenacity
+from market_data_ingestion.src.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class KiteWebSocketAdapter:
@@ -52,6 +54,12 @@ class KiteWebSocketAdapter:
                 logger.error(f"Error sending heartbeat: {e}")
                 break
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(5),
+        wait=tenacity.wait_exponential(multiplier=1, min=4, max=30),
+        retry=tenacity.retry_if_exception_type(Exception),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING)
+    )
     async def connect(self):
         """Connects to the Kite WebSocket."""
         try:
@@ -117,22 +125,34 @@ class KiteWebSocketAdapter:
             logger.error(f"Error processing message: {e}")
 
     def _normalize_data(self, data: Dict[str, Any], provider: str) -> Dict[str, Any]:
-        """Normalizes the data to a unified JSON structure."""
-        # This is a placeholder implementation.  You will need to adjust this
-        # based on the actual data format received from the Kite websocket.
+        """Normalizes the data to a unified JSON structure based on Kite websocket format."""
+        # Kite websocket sends tick data in format like:
+        # {"instrument_token": 123, "last_price": 100.0, "timestamp": "2023-01-01T10:00:00Z", ...}
+        # Normalize to candle format for consistency
+        timestamp = data.get("timestamp")
+        if isinstance(timestamp, str):
+            # Assume ISO format
+            pass
+        else:
+            timestamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(timestamp or time.time()))
+
         return {
-            "symbol": data.get("instrument", "UNKNOWN"),
-            "ts_utc": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(data.get("timestamp", time.time()))),
-            "type": "trade",
+            "symbol": data.get("instrument_token", "UNKNOWN"),  # Use token as symbol identifier
+            "ts_utc": timestamp,
+            "type": "tick",  # Kite provides ticks, not candles
             "price": data.get("last_price", 0.0),
             "qty": data.get("last_quantity", 0),
-            "open": data.get("open", 0.0),
-            "high": data.get("high", 0.0),
-            "low": data.get("low", 0.0),
-            "close": data.get("close", 0.0),
+            "open": data.get("ohlc", {}).get("open", 0.0),
+            "high": data.get("ohlc", {}).get("high", 0.0),
+            "low": data.get("ohlc", {}).get("low", 0.0),
+            "close": data.get("ohlc", {}).get("close", 0.0),
             "volume": data.get("volume", 0),
             "provider": provider,
-            "meta": {},
+            "meta": {
+                "instrument_token": data.get("instrument_token"),
+                "mode": data.get("mode"),
+                "tradable": data.get("tradable"),
+            },
         }
 
     async def realtime_connect(self, symbols: List[str]):

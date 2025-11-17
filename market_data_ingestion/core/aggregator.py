@@ -5,7 +5,9 @@ from typing import Dict, Any
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from market_data_ingestion.src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class TickAggregator:

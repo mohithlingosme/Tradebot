@@ -1,13 +1,122 @@
 version: "3.8"
 
 services:
+  backend_api:
+    build:
+      context: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./market_data.db}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: market_data
+      POSTGRES_USER: finbot
+      POSTGRES_PASSWORD: finbot123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finbot -d market_data"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   market_data_ingestion:
     build: .
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
+      - "8001:8001"  # API port (changed from 8000 to avoid conflict)
+      - "8080:8080"  # Health check port
+      - "9090:9090"  # Metrics port
     environment:
-      - ALPHAVANTAGE_API_KEY=YOUR_ALPHAVANTAGE_API_KEY
-      - KITE_API_KEY=YOUR_KITE_API_KEY
-      - KITE_API_SECRET=YOUR_KITE_API_SECRET
+      - DATABASE_URL=postgresql://finbot:finbot123@db:5432/market_data
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - KITE_API_KEY=${KITE_API_KEY}
+      - KITE_API_SECRET=${KITE_API_SECRET}
+      - LOG_LEVEL=INFO
+      - APP_ENV=development
+      - APP_PORT=8001
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Staging environment
+  market_data_ingestion_staging:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "8002:8002"  # Staging API port
+      - "8081:8081"  # Staging health check port
+      - "9091:9091"  # Staging metrics port
+    environment:
+      - DATABASE_URL=postgresql://finbot:finbot123@db:5432/market_data_staging
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - KITE_API_KEY=${KITE_API_KEY}
+      - KITE_API_SECRET=${KITE_API_SECRET}
+      - LOG_LEVEL=INFO
+      - APP_ENV=staging
+      - APP_PORT=8002
+      - HEALTH_CHECK_PORT=8081
+      - METRICS_PORT=9091
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - staging
+
+  # Sandbox environment for MVP
+  market_data_ingestion_sandbox:
+    build: .
+    volumes:
+      - .:/app
+    ports:
+      - "8003:8003"  # Sandbox API port
+      - "8082:8082"  # Sandbox health check port
+      - "9092:9092"  # Sandbox metrics port
+    environment:
+      - DATABASE_URL=sqlite:///app/market_data_sandbox.db
+      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
+      - KITE_API_KEY=${KITE_API_KEY}
+      - KITE_API_SECRET=${KITE_API_SECRET}
+      - LOG_LEVEL=INFO
+      - APP_ENV=sandbox
+      - APP_PORT=8003
+      - HEALTH_CHECK_PORT=8082
+      - METRICS_PORT=9092
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    profiles:
+      - sandbox
+
+volumes:
+  postgres_data:

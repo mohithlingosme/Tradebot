@@ -10,6 +10,8 @@ setup(
         "pandas",
         "numpy",
         "scikit-learn",
+        "sqlalchemy",
+        "psutil",
         "pytest",
         "pytest-asyncio",
         "yfinance",
@@ -17,5 +19,6 @@ setup(
         "websockets",
         "asyncio",
         "aiohttp",
+        "httpx",
     ],
 )

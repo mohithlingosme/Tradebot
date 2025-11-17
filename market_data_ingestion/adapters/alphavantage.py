@@ -1,6 +1,11 @@
 import aiohttp
 import asyncio
+import logging
 from typing import Dict, Any, Optional
+import tenacity
+from market_data_ingestion.src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class AlphaVantageAdapter:
     def __init__(self, config: Dict[str, Any]):
@@ -10,6 +15,12 @@ class AlphaVantageAdapter:
         self.rate_limit_delay = 60 / config.get("rate_limit_per_minute", 5)  # Delay in seconds
         self.session = None
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
+        retry=tenacity.retry_if_exception_type(Exception),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING)
+    )
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
         return self
@@ -21,7 +32,7 @@ class AlphaVantageAdapter:
     async def fetch_historical_data(
         self, symbol: str, start: str, end: str, interval: str = "1m"
     ) -> list[Dict[str, Any]]:
-        '''Fetches historical data from Alpha Vantage.
+        '''Fetches historical data from Alpha Vantage with rate limiting.
 
         Args:
             symbol (str): The symbol to fetch data for (e.g., "RELIANCE.NS").
@@ -32,6 +43,9 @@ class AlphaVantageAdapter:
         Returns:
             list[Dict[str, Any]]: A list of normalized data dictionaries.
         '''
+        # Rate limiting: wait before making request
+        await asyncio.sleep(self.rate_limit_delay)
+
         try:
             # Determine the function based on the interval
             if interval == "1d":
@@ -49,7 +63,7 @@ class AlphaVantageAdapter:
             normalized_data = self._normalize_data(symbol, data, interval, "alphavantage")
             return normalized_data
         except Exception as e:
-            print(f"Error fetching data for {symbol}: {e}")
+            logger.error(f"Error fetching data for {symbol}: {e}")
             return []
 
     def _normalize_data(self, symbol: str, data: Dict[str, Any], interval: str, provider: str) -> list[Dict[str, Any]]:

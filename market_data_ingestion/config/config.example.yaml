@@ -2,6 +2,7 @@
 
 database:
   db_path: "market_data.db"  # Path to SQLite database
+  # For PostgreSQL: connection_string: "postgresql://user:pass@localhost:5432/market_data"
 
 providers:
   yfinance:
@@ -10,6 +11,7 @@ providers:
   alphavantage:
     is_active: True
     api_key: "${ALPHAVANTAGE_API_KEY}"
+    base_url: "https://www.alphavantage.co"
     rate_limit_per_minute: 5  # Alpha Vantage free tier limit
   kite_ws:
     is_active: True
@@ -30,8 +32,31 @@ instruments:
 pipelines:
   realtime:
     enabled: True
+    symbols: ["RELIANCE.NS", "TCS.NS"]
+    provider: "mock"  # Use "kite_ws" for real Kite, "mock" for testing
   backfill:
     enabled: True
+    symbols: ["AAPL", "RELIANCE.NS"]
+    period: "7d"
+    interval: "1d"
 
 logging:
   level: "INFO"
+  format: "%(asctime)s - %(levelname)s - %(message)s"
+
+health:
+  port: 8080
+  check_interval: 30
+
+metrics:
+  port: 9090
+  enabled: True
+
+scheduler:
+  auto_refresh:
+    enabled: True
+    run_time: "02:00"        # 24h format HH:MM
+    timezone: "UTC"          # IANA timezone name
+    period: "7d"             # Backfill window
+    interval: "1h"           # Candle interval
+    symbols: ["AAPL", "RELIANCE.NS"]  # Optional override. Uses pipelines.backfill when omitted.

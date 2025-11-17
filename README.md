@@ -1,105 +1,128 @@
-# Finbot - Autonomous Trading System
+# Finbot: AI-Powered Autonomous Trading System
 
-A comprehensive autonomous trading system built with Python, featuring real-time market data ingestion, advanced technical indicators, risk management, and a modern web dashboard.
+An intelligent, autonomous trading bot for intraday and F&O trading that leverages advanced algorithms, real-time data analysis, and risk-managed decision-making. Finbot combines market data ingestion, AI-driven trading strategies, portfolio management, and comprehensive risk controls.
 
-## Features
+## Featurescd
 
-- **Market Data Ingestion**: Real-time and historical data from multiple sources (Yahoo Finance, Alpha Vantage, Polygon)
-- **Technical Indicators**: 117+ indicators implemented for comprehensive analysis
-- **Trading Strategies**: Adaptive RSI-MACD strategy with backtesting capabilities
-- **Risk Management**: Portfolio optimization and position sizing
-- **Web Dashboard**: Streamlit-based interface for monitoring and control
-- **API Services**: REST and WebSocket endpoints for external integrations
-- **Authentication**: JWT-based secure API access
-- **CI/CD**: Automated testing, building, and deployment
-- **Monitoring**: Health checks, metrics, and alerting
+### Core Trading Features
+- **Autonomous Trading Execution**: AI-driven decision making with minimal human intervention
+- **Multi-Asset Support**: Equities, Futures, Options, and Currency derivatives
+- **Real-Time Strategy Execution**: Live trading with sub-second decision making
+- **Risk-First Approach**: Comprehensive risk management with position limits and drawdown controls
+
+### Data & Analytics
+- **Multi-Provider Data Ingestion**: Yahoo Finance, Alpha Vantage, Kite WebSocket, and more
+- **Historical Data Backfilling**: Configurable periods and intervals for strategy testing
+- **Real-Time Data Streaming**: WebSocket connections for live market data
+- **Technical Indicators**: 50+ indicators including RSI, MACD, Bollinger Bands, ATR
+
+### AI & Intelligence
+- **AI Trading Assistants**: Research, trading, portfolio, and decision AI using LLMs
+- **News Pipeline**: AI-powered news scraping, paraphrasing, and sentiment analysis
+- **Strategy Optimization**: Machine learning for strategy parameter tuning
+- **Market Sentiment Analysis**: Real-time sentiment tracking from news and social media
+
+### Infrastructure
+- **Database Abstraction**: SQLite/PostgreSQL with SQLAlchemy ORM
+- **REST API**: FastAPI-based backend with comprehensive endpoints
+- **Real-Time Communication**: WebSocket support for live updates
+- **Dashboard**: Streamlit and React-based monitoring interfaces
+- **Docker Support**: Multi-environment containerized deployment
+- **Monitoring**: Prometheus metrics, health checks, and logging
+
+## Tech Stack
+
+### Backend
+- **Python 3.11+**
+- **FastAPI** for REST API and WebSockets
+- **AsyncIO** for concurrent operations
+- **SQLAlchemy** for database abstraction
+- **Redis** for caching and session management
+
+### Frontend
+- **Streamlit** for trading dashboard
+- **React + Vite** for advanced UI
+- **Plotly** for data visualization
+- **WebSocket** for real-time updates
+
+### Data & AI
+- **Pandas/NumPy** for data processing
+- **TA-Lib** for technical analysis
+- **Scikit-learn** for machine learning
+- **Google Generative AI** for LLM assistants
+- **PostgreSQL** for production database
+
+### Infrastructure
+- **Docker** for containerization
+- **PostgreSQL** for data persistence
+- **Redis** for caching
+- **Prometheus** for monitoring
+- **pytest** for testing
+- **GitHub Actions** for CI/CD
+
+## Prerequisites
+
+- Python 3.10+
+- Docker (optional, for containerized deployment)
 
 ## Quick Start
 
-### Prerequisites
+### Local Development
 
-- Python 3.8+
-- Docker and Docker Compose
-- PostgreSQL (optional, for persistent storage)
+1. **Clone the repository:**
+   ```bash
+   git clone <repository-url>
+   cd finbot
+   ```
 
-### Installation
+2. **Set up environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your API keys
+   ```
 
-1. Clone the repository:
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Run database migrations:**
+   ```bash
+   python migrate.py
+   ```
+
+5. **Start the backend API server:**
+   ```bash
+   # Option 1: Start the main backend (includes trading engine, AI, etc.)
+   python -m backend.app.main
+
+   # Option 2: Start market data ingestion API only
+   python -m market_data_ingestion.src.api
+
+   # Option 3: Start Finbot backend API
+   python -m finbot-backend.api.main
+   ```
+
+6. **Start the frontend dashboard (optional):**
+   ```bash
+   # Option 1: Streamlit dashboard
+   streamlit run finbot-frontend/dashboard/app.py
+
+   # Option 2: React frontend
+   cd frontend && npm install && npm run dev
+   ```
+
+### Docker Deployment
+
 ```bash
-git clone https://github.com/mohithlingosme/blackboxai-finbot.git
-cd blackboxai-finbot
-```
-
-2. Copy environment configuration:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
-pip install -e finbot-backend/
-```
-
-4. Run the application:
-```bash
-# Start all services
+# Development environment
 docker-compose up
 
-# Or run backend only
-cd finbot-backend
-uvicorn api.main:app --reload
-```
+# Staging environment
+docker-compose --profile staging up
 
-## API Documentation
-
-The FastAPI backend provides comprehensive REST and WebSocket endpoints:
-
-### Authentication
-```bash
-# Login
-curl -X POST "http://localhost:8000/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin123"}'
-
-# Use the returned token in subsequent requests
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  http://localhost:8000/protected
-```
-
-### Key Endpoints
-- `GET /health` - System health check
-- `GET /metrics` - Performance metrics
-- `POST /trades` - Place trade orders
-- `GET /portfolio` - Portfolio summary
-- `POST /strategies/{action}` - Strategy management
-- `WebSocket /ws/trades` - Real-time trade updates
-
-## Deployment
-
-### Development
-```bash
-docker-compose -f docker-compose.dev.yml up
-```
-
-### Staging
-```bash
-docker-compose -f docker-compose.staging.yml up
-```
-
-### Production
-```bash
-docker-compose -f docker-compose.prod.yml up
-```
-
-### Rollback
-```bash
-# Rollback to previous version
-./deployment/rollback.sh --previous
-
-# Rollback to specific tag
-./deployment/rollback.sh --tag v1.2.3
+# Sandbox environment
+docker-compose --profile sandbox up
 ```
 
 ## Configuration
@@ -109,173 +132,265 @@ docker-compose -f docker-compose.prod.yml up
 Copy `.env.example` to `.env` and configure:
 
 ```bash
-# Authentication
-JWT_SECRET_KEY=your-secret-key
-
 # Database
-DATABASE_URL=postgresql://user:pass@localhost:5432/finbot
+DATABASE_URL=sqlite:///market_data.db
 
-# Trading
-TRADING_MODE=simulation  # simulation, paper, live
-INITIAL_CASH=100000
+# API Keys
+ALPHAVANTAGE_API_KEY=your_key_here
+KITE_API_KEY=your_key_here
+KITE_API_SECRET=your_secret_here
 
-# Risk Management
-MAX_DRAWDOWN=0.15
-MAX_DAILY_LOSS=0.05
+# Application
+APP_ENV=development
+APP_PORT=8001
+LOG_LEVEL=INFO
+
+# AI Safety
+FINBOT_FINANCIAL_DISCLAIMER="Finbot responses are informational only..."
 ```
 
-### Environment-Specific Configs
+### Supported Providers
 
-- `finbot-backend/config/` - Environment-specific configurations
-- Staging and production configs override defaults
+- **Yahoo Finance**: Free historical data, rate limited
+- **Alpha Vantage**: API key required, 5 requests/minute
+- **Kite WebSocket**: Real-time data, requires Kite Connect credentials
+
+## Usage
+
+### CLI Commands
+
+```bash
+# Backfill historical data
+python backfill.py --symbols AAPL MSFT --period 30d --interval 1d --provider yfinance
+
+# Start realtime ingestion
+python realtime.py --symbols RELIANCE.NS TCS.NS --provider mock
+
+# Run database migrations
+python migrate.py
+
+# Start mock WebSocket server
+python src/cli.py mock-server
+```
+
+### API Endpoints
+
+#### Health & Monitoring
+```bash
+# Health check
+curl http://localhost:8001/health
+
+# Readiness check
+curl http://localhost:8001/ready
+
+# Prometheus metrics
+curl http://localhost:8001/metrics
+```
+
+#### Financial News
+```bash
+# Fetch curated news feed
+curl http://localhost:8001/news
+
+# Trigger AI-enhanced refresh (requires Bearer token)
+curl -X POST http://localhost:8001/news/refresh ^
+  -H "Authorization: Bearer <token>"
+```
+
+#### AI Assistants
+```bash
+# Research assistant
+curl -X POST http://localhost:8001/ai/research-assistant ^
+  -H "Authorization: Bearer <token>" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"topic\": \"NVIDIA AI strategy\"}"
+
+# Trading assistant
+curl -X POST http://localhost:8001/ai/trading-assistant ^
+  -H "Authorization: Bearer <token>" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"symbol\": \"AAPL\", \"risk_profile\": \"moderate\", \"account_size\": 25000}"
+```
+
+#### Data Access
+```bash
+# Get candle data
+curl "http://localhost:8001/candles?symbol=AAPL&interval=1d&limit=100"
+
+# Get available symbols
+curl http://localhost:8001/symbols
+```
+
+### Examples
+
+See `curl_examples.sh` for comprehensive API usage examples.
+
+## Project Structure
+
+```
+├── backend/                # Main FastAPI backend application
+│   ├── app/
+│   │   ├── main.py         # Main FastAPI app with trading endpoints
+│   │   ├── routes.py       # API routes
+│   │   ├── routes_ai.py    # AI assistant routes
+│   │   ├── models.py       # Database models
+│   │   ├── config.py       # Configuration management
+│   │   ├── database.py     # Database connection
+│   │   ├── cache.py        # Redis caching
+│   │   ├── sim.py          # Trading simulator
+│   │   ├── telemetry.py    # Monitoring and metrics
+│   │   ├── ai/             # AI pipeline components
+│   │   ├── payments/       # Payment integration
+│   │   └── security/       # Security middleware
+│   └── requirements.txt    # Backend dependencies
+├── finbot-backend/         # Finbot-specific backend modules
+│   ├── api/                # API endpoints
+│   ├── core/               # Core business logic
+│   ├── config/             # Configuration
+│   ├── broker_integration/ # Broker API integrations
+│   ├── indicators/         # Technical indicators
+│   ├── risk_management/    # Risk management modules
+│   ├── trading_engine/     # Trading strategy engine
+│   ├── data_ingestion/     # Data ingestion pipeline
+│   └── logs/               # Logging configuration
+├── market_data_ingestion/  # Market data ingestion system
+│   ├── adapters/           # Data provider adapters
+│   ├── core/               # Core ingestion logic
+│   ├── src/                # API and CLI
+│   └── migrations/         # Database migrations
+├── frontend/               # React frontend application
+│   ├── src/                # React components
+│   ├── public/             # Static assets
+│   └── package.json        # Frontend dependencies
+├── finbot-frontend/        # Streamlit dashboard
+│   ├── dashboard/          # Dashboard components
+│   └── lib/                # Utility libraries
+├── database/               # Database schemas and migrations
+├── docs/                   # Documentation
+├── scripts/                # Utility scripts
+├── tests/                  # Test suites
+├── docker-compose.yml      # Multi-environment setup
+├── Dockerfile             # Container definition
+└── requirements.txt       # Python dependencies
+```
 
 ## Development
 
 ### Running Tests
 
 ```bash
-# Run all tests
-python -m pytest tests/ -v --cov=finbot
+# Install test dependencies
+pip install pytest pytest-asyncio pytest-cov
 
-# Run specific test file
-python -m pytest tests/unit/test_indicators.py -v
-
-# Run with coverage
-python -m pytest --cov=finbot --cov-report=html
+# Run tests with coverage
+pytest --cov=market_data_ingestion --cov-report=html
 ```
 
 ### Code Quality
 
 ```bash
-# Linting
-flake8 .
+# Lint with flake8
+flake8 market_data_ingestion --max-line-length=127
 
-# Type checking
-mypy .
-
-# Formatting
-black .
-isort .
+# Type checking (if mypy configured)
+mypy market_data_ingestion
 ```
 
-### API Testing
+### Adding New Adapters
 
-```bash
-# Start the API server
-cd finbot-backend
-uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+1. Create adapter class inheriting from base adapter pattern
+2. Implement `fetch_historical_data()` and `realtime_connect()` methods
+3. Add rate limiting and error handling
+4. Update CLI argument parsing
+5. Add tests
 
-# Test endpoints
-curl http://localhost:8000/health
-curl http://localhost:8000/docs  # Interactive API docs
+## API Documentation
+
+### Candle Data Format
+
+```json
+{
+  "symbol": "AAPL",
+  "ts_utc": "2023-01-01T10:00:00Z",
+  "type": "candle",
+  "open": 150.0,
+  "high": 151.0,
+  "low": 149.0,
+  "close": 150.5,
+  "volume": 1000000,
+  "provider": "yfinance",
+  "meta": {}
+}
 ```
 
-## Monitoring
+### WebSocket Message Format
 
-### Health Checks
-- `GET /health` - Comprehensive system health
-- Database connectivity
-- External API status
-- Service availability
+```json
+{
+  "instrument_token": 123,
+  "last_price": 150.5,
+  "timestamp": "2023-01-01T10:00:00Z",
+  "ohlc": {
+    "open": 150.0,
+    "high": 151.0,
+    "low": 149.0,
+    "close": 150.5
+  },
+  "volume": 1000000
+}
+```
 
-### Metrics
-- `GET /metrics` - Performance metrics
-- Trading statistics
-- System resources
-- Error rates
+## Deployment
 
-### Logging
-- Structured logging with configurable levels
-- Log rotation and retention
-- External log aggregation support
+### Docker Environments
 
-## Security
+- **Development**: Full stack with hot reload
+- **Staging**: Production-like setup with PostgreSQL
+- **Sandbox**: SQLite with mock data for testing
 
-- JWT-based authentication
-- CORS protection
-- Input validation
-- Secure environment variable handling
-- Regular security updates
+### Production Considerations
+
+- Use PostgreSQL for production databases
+- Configure proper logging and monitoring
+- Set up SSL/TLS for API endpoints
+- Implement proper secrets management
+- Configure rate limiting and CORS
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Update documentation
-7. Commit your changes (`git commit -m 'Add amazing feature'`)
-8. Push to the branch (`git push origin feature/amazing-feature`)
-9. Open a Pull Request
+3. Write tests for new functionality
+4. Ensure all tests pass (`pytest`)
+5. Update documentation as needed
+6. Commit changes (`git commit -m 'Add amazing feature'`)
+7. Push to branch (`git push origin feature/amazing-feature`)
+8. Open a Pull Request
 
-### Development Workflow
+## Testing Strategy
 
-1. **Setup**: Follow the installation steps above
-2. **Development**: Make changes with tests
-3. **Testing**: Run the full test suite
-4. **Documentation**: Update docs for any API changes
-5. **PR**: Create a pull request with a clear description
-
-## Project Structure
-
-```
-finbot/
-├── .github/workflows/         # CI/CD pipelines
-├── market_data_ingestion/     # Data ingestion pipeline
-├── finbot-backend/           # Core trading engine and API
-│   ├── api/                   # FastAPI endpoints
-│   ├── config/               # Configuration management
-│   ├── trading_engine/       # Trading logic
-│   ├── risk_management/      # Risk controls
-│   └── indicators/           # Technical indicators
-├── finbot-frontend/          # Web dashboard
-├── tests/                    # Unit and integration tests
-├── docs/                     # Documentation
-├── deployment/               # Deployment configurations
-├── .env.example             # Environment template
-└── docker-compose.yml       # Container orchestration
-```
+- **Unit tests**: Individual components and functions
+- **Integration tests**: Adapter functionality with mock data
+- **Performance tests**: Ingestion pipeline throughput
+- **Docker tests**: Containerized deployment verification
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Database Connection Failed**
-   ```bash
-   # Check PostgreSQL is running
-   docker-compose ps db
+1. **Database connection errors**: Check DATABASE_URL format
+2. **API key errors**: Verify keys are set in environment
+3. **Rate limiting**: Implement delays between requests
+4. **WebSocket connection**: Check firewall and network settings
 
-   # Reset database
-   docker-compose down -v
-   docker-compose up db
-   ```
+### Logs
 
-2. **API Authentication Issues**
-   ```bash
-   # Check JWT secret in .env
-   echo $JWT_SECRET_KEY
-
-   # Test login endpoint
-   curl -X POST "http://localhost:8000/auth/login" \
-     -d '{"username": "admin", "password": "admin123"}'
-   ```
-
-3. **Docker Build Issues**
-   ```bash
-   # Clean Docker cache
-   docker system prune -a
-
-   # Rebuild without cache
-   docker-compose build --no-cache
-   ```
+Logs are written to console with configurable levels:
+- DEBUG: Detailed operation information
+- INFO: General operational messages
+- WARNING: Potential issues
+- ERROR: Failures requiring attention
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/mohithlingosme/blackboxai-finbot/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/mohithlingosme/blackboxai-finbot/discussions)
-- **Documentation**: [Wiki](https://github.com/mohithlingosme/blackboxai-finbot/wiki)
+MIT License - see LICENSE file for details.

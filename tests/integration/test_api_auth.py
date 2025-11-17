@@ -12,10 +12,12 @@ import asyncio
 from fastapi.testclient import TestClient
 
 # Add finbot-backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'finbot-backend'))
+finbot_backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'finbot-backend')
+sys.path.insert(0, finbot_backend_path)
 
-from api.main import app
-from api.auth import UserCredentials
+# Import with type ignore for linter - path is added at runtime
+from api.main import app  # type: ignore
+from api.auth import UserCredentials  # type: ignore
 
 
 class TestAPIAuthentication(unittest.TestCase):

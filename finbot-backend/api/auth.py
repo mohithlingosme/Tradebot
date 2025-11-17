@@ -45,6 +45,12 @@ DEMO_USERS = {
     "trader": User("trader", pwd_context.hash("trader123"))
 }
 
+# User storage (in production, use database)
+USER_DATABASE = {
+    "admin": {"username": "admin", "email": "admin@finbot.com", "hashed_password": pwd_context.hash("admin123")},
+    "trader": {"username": "trader", "email": "trader@finbot.com", "hashed_password": pwd_context.hash("trader123")}
+}
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
     return pwd_context.verify(plain_password, hashed_password)

@@ -19,13 +19,20 @@ Endpoints:
 - WebSocket /ws/trades - Real-time trade updates
 """
 
+import asyncio
 import logging
 import os
-from fastapi import FastAPI, HTTPException, Depends, WebSocket
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, List, Optional
+import time
 from datetime import datetime
+from typing import Any, Dict, List, Optional, Set
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +40,7 @@ from .auth import (
     UserCredentials, TokenResponse, authenticate_user,
     create_access_token, get_current_active_user
 )
+from ..config import get_config
 try:
     from ..trading_engine import (
         StrategyManager, AdaptiveRSIMACDStrategy,
@@ -50,16 +58,57 @@ except ImportError:
     PortfolioManager = None
     get_logger = lambda: None
 
+# Global configuration
+config = get_config()
+APP_START_TIME = datetime.utcnow()
+EXTERNAL_HEALTH_ENDPOINTS = {
+    "alphavantage": os.getenv("ALPHAVANTAGE_HEALTH_URL", "https://www.alphavantage.co"),
+    "yahoo_finance": os.getenv(
+        "YAHOO_FINANCE_HEALTH_URL",
+        "https://query1.finance.yahoo.com/v7/finance/quote?symbols=AAPL"
+    ),
+}
+
+# Import market data router
+try:
+    from .market_data import router as market_data_router
+    MARKET_DATA_AVAILABLE = True
+except ImportError:
+    MARKET_DATA_AVAILABLE = False
+    logger.warning("Market data router not available")
+
+# Import news router / scheduler
+try:
+    from .news import router as news_router
+    from ..core.news_pipeline import get_news_scheduler
+    NEWS_AVAILABLE = True
+except ImportError:
+    NEWS_AVAILABLE = False
+    news_router = None
+    logger.warning("News router not available")
+
 app = FastAPI(
     title="Finbot Trading API",
     description="API for Finbot autonomous trading system",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
 )
+
+# Import core services
+try:
+    from ..core import RateLimitMiddleware, cache_manager
+    # Add rate limiting middleware
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=60, requests_per_hour=1000)
+    logger.info("Rate limiting middleware enabled")
+except ImportError:
+    logger.warning("Rate limiting middleware not available")
 
 # CORS middleware for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8501"],  # Streamlit default port
+    allow_origins=["http://localhost:8501", "http://localhost:5173", "http://localhost:3000"],  # Streamlit, Vite, React
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,6 +136,159 @@ live_trading_engine = LiveTradingEngine(
     portfolio_manager=portfolio_manager
 ) if LiveTradingEngine else None
 
+
+class TradeStreamManager:
+    """In-memory pub/sub manager for trade streaming."""
+
+    def __init__(self):
+        self._subscribers: Set[asyncio.Queue] = set()
+        self._lock = asyncio.Lock()
+
+    async def subscribe(self) -> asyncio.Queue:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        async with self._lock:
+            self._subscribers.add(queue)
+        return queue
+
+    async def unsubscribe(self, queue: asyncio.Queue):
+        async with self._lock:
+            self._subscribers.discard(queue)
+
+    async def broadcast(self, message: Dict[str, Any]):
+        async with self._lock:
+            subscribers = list(self._subscribers)
+
+        for queue in subscribers:
+            try:
+                queue.put_nowait(message)
+
+    async def count_subscribers(self) -> int:
+        async with self._lock:
+            return len(self._subscribers)
+            except asyncio.QueueFull:
+                # Drop oldest message to keep stream moving
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                queue.put_nowait(message)
+
+
+trade_stream_manager = TradeStreamManager()
+
+
+def _resolve_database_url() -> Optional[str]:
+    db_cfg = config.get("database", {})
+    if db_cfg.get("url"):
+        return db_cfg["url"]
+
+    user = db_cfg.get("user")
+    password = db_cfg.get("password")
+    host = db_cfg.get("host")
+    port = db_cfg.get("port")
+    name = db_cfg.get("name")
+
+    if user and password and host and port and name:
+        return f"postgresql://{user}:{password}@{host}:{port}/{name}"
+
+    if name:
+        return f"sqlite:///{name}.db"
+
+    return None
+
+
+def _check_database_health() -> Dict[str, Any]:
+    db_url = _resolve_database_url()
+    if not db_url:
+        return {"status": "unknown", "details": "Database configuration missing"}
+
+    start = time.perf_counter()
+    try:
+        engine = create_engine(db_url, future=True)
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        latency = round((time.perf_counter() - start) * 1000, 2)
+        engine.dispose()
+        return {"status": "healthy", "latency_ms": latency}
+    except ModuleNotFoundError as exc:
+        logger.error(f"Database driver not installed: {exc}")
+        return {"status": "unknown", "details": f"Driver missing: {exc.name}"}
+    except SQLAlchemyError as exc:
+        logger.error(f"Database health check failed: {exc}")
+        return {"status": "unhealthy", "details": str(exc)}
+
+
+def _hit_endpoint(url: str, timeout: float) -> float:
+    request = Request(url, method="HEAD")
+    start = time.perf_counter()
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            status = response.status
+    except HTTPError as exc:
+        status = exc.code
+        if status == 405:  # Method not allowed, retry with GET
+            request = Request(url, method="GET")
+            with urlopen(request, timeout=timeout) as response:
+                status = response.status
+    except URLError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    if status >= 500:
+        raise RuntimeError(f"HTTP {status}")
+
+    latency = round((time.perf_counter() - start) * 1000, 2)
+    return latency
+
+
+def _check_external_services(timeout: float = 3.0) -> Dict[str, Dict[str, Any]]:
+    results: Dict[str, Dict[str, Any]] = {}
+    for name, url in EXTERNAL_HEALTH_ENDPOINTS.items():
+        if not url:
+            results[name] = {"status": "unknown", "details": "URL not configured"}
+            continue
+        try:
+            latency = _hit_endpoint(url, timeout)
+            results[name] = {"status": "healthy", "latency_ms": latency}
+        except Exception as exc:  # pragma: no cover - network edge cases
+            results[name] = {"status": "unhealthy", "details": str(exc)}
+    return results
+
+# Include market data router if available
+if MARKET_DATA_AVAILABLE:
+    app.include_router(market_data_router)
+
+if NEWS_AVAILABLE and news_router is not None:
+    app.include_router(news_router)
+
+    async def start_news_scheduler():
+        scheduler = get_news_scheduler()
+        if scheduler:
+            scheduler.start()
+
+    async def stop_news_scheduler():
+        scheduler = get_news_scheduler()
+        if scheduler:
+            await scheduler.stop()
+
+    app.add_event_handler("startup", start_news_scheduler)
+    app.add_event_handler("shutdown", stop_news_scheduler)
+
+# Include AI router
+try:
+    from .ai import router as ai_router
+    app.include_router(ai_router)
+    logger.info("AI router enabled")
+except ImportError:
+    logger.warning("AI router not available")
+
+# Include paper trading router
+try:
+    from .paper_trading import router as paper_trading_router
+    app.include_router(paper_trading_router)
+    logger.info("Paper trading router enabled")
+except ImportError:
+    logger.warning("Paper trading router not available")
+
 @app.get("/")
 async def root():
     """Root endpoint."""
@@ -106,7 +308,8 @@ async def get_status():
         "services": {
             "strategy_manager": "active" if strategy_manager else "inactive",
             "portfolio_manager": "active" if portfolio_manager else "inactive",
-            "logger": "active" if logger_service else "inactive"
+            "logger": "active" if logger_service else "inactive",
+            "market_data": "active" if MARKET_DATA_AVAILABLE else "inactive"
         }
     }
 
@@ -401,28 +604,35 @@ async def websocket_trades(websocket: WebSocket):
     Clients can subscribe to live trade updates.
     """
     await websocket.accept()
+    subscriber = await trade_stream_manager.subscribe()
+    await websocket.send_json(
+        {
+            "type": "status",
+            "timestamp": datetime.now().isoformat(),
+            "message": "Subscribed to trade stream",
+        }
+    )
 
     try:
         while True:
-            # TODO: Implement real-time trade streaming
-            # - Subscribe to trade events
-            # - Send updates to connected clients
+            try:
+                message = await asyncio.wait_for(subscriber.get(), timeout=15)
+                await websocket.send_json(message)
+            except asyncio.TimeoutError:
+                await websocket.send_json(
+                    {
+                        "type": "keepalive",
+                        "timestamp": datetime.now().isoformat(),
+                        "message": "still connected",
+                    }
+                )
 
-            # For now, send periodic status updates
-            import asyncio
-            await asyncio.sleep(5)
-
-            status_data = {
-                "type": "status",
-                "timestamp": datetime.now().isoformat(),
-                "message": "Connection active"
-            }
-
-            await websocket.send_json(status_data)
-
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
     finally:
+        await trade_stream_manager.unsubscribe(subscriber)
         await websocket.close()
 
 # Authentication endpoints
@@ -455,6 +665,85 @@ async def logout(current_user: Dict = Depends(get_current_active_user)):
     # In a stateless JWT system, logout is handled client-side by discarding the token
     # For server-side token invalidation, implement token blacklisting
     return {"message": "Logged out successfully"}
+
+class RegisterRequest(BaseModel):
+    """User registration request model."""
+    username: str
+    email: str
+    password: str
+
+@app.post("/auth/register", response_model=TokenResponse)
+async def register(request: RegisterRequest):
+    """
+    Register a new user.
+
+    Args:
+        request: Registration details
+
+    Returns:
+        JWT access token
+    """
+    from .auth import USER_DATABASE, pwd_context
+    
+    # Check if user already exists
+    if request.username in USER_DATABASE:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Validate email format
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, request.email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    
+    # Validate password strength
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    
+    # Create new user
+    hashed_password = pwd_context.hash(request.password)
+    USER_DATABASE[request.username] = {
+        "username": request.username,
+        "email": request.email,
+        "hashed_password": hashed_password
+    }
+    
+    # Create token
+    access_token = create_access_token(data={"sub": request.username})
+    logger.info(f"New user registered: {request.username}")
+    
+    return TokenResponse(access_token=access_token, expires_in=1800)
+
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request model."""
+    email: str
+
+@app.post("/auth/forgot-password")
+async def forgot_password(request: ForgotPasswordRequest):
+    """
+    Request password reset.
+
+    Args:
+        request: Email address
+
+    Returns:
+        Confirmation message
+    """
+    from .auth import USER_DATABASE
+    
+    # Find user by email
+    user = None
+    for username, user_data in USER_DATABASE.items():
+        if user_data.get("email") == request.email:
+            user = username
+            break
+    
+    # Always return success message (security best practice - don't reveal if email exists)
+    # In production, send actual password reset email
+    logger.info(f"Password reset requested for email: {request.email}")
+    
+    return {
+        "message": "If an account exists with this email, you will receive password reset instructions."
+    }
 
 # Trade execution model
 class TradeRequest(BaseModel):
@@ -496,6 +785,13 @@ async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_curr
         }
 
         logger.info(f"Trade executed: {trade_result}")
+        await trade_stream_manager.broadcast(
+            {
+                "type": "trade",
+                "timestamp": trade_result["timestamp"],
+                "trade": trade_result
+            }
+        )
         return trade_result
 
     except HTTPException:
@@ -512,22 +808,28 @@ async def get_health():
     Returns:
         Comprehensive health status
     """
+    services = {
+        "strategy_manager": "healthy" if strategy_manager else "unhealthy",
+        "portfolio_manager": "healthy" if portfolio_manager else "unhealthy",
+        "logger": "healthy" if logger_service else "unhealthy",
+        "trading_engine": "healthy" if live_trading_engine else "unhealthy"
+    }
+
+    db_health = _check_database_health()
+    external_health = _check_external_services()
+
     health_status = {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": "1.0.0",
-        "services": {
-            "strategy_manager": "healthy" if strategy_manager else "unhealthy",
-            "portfolio_manager": "healthy" if portfolio_manager else "unhealthy",
-            "logger": "healthy" if logger_service else "unhealthy",
-            "trading_engine": "healthy" if live_trading_engine else "unhealthy"
-        },
-        "database": "healthy",  # TODO: Add actual DB health check
-        "external_apis": "healthy"  # TODO: Add external API health checks
+        "services": services,
+        "database": db_health,
+        "external_apis": external_health
     }
 
-    # Check if any service is unhealthy
-    if any(status == "unhealthy" for status in health_status["services"].values()):
+    dependency_states = [db_health.get("status")] + [svc.get("status") for svc in external_health.values()]
+    if any(state == "unhealthy" for state in dependency_states if state) or \
+            any(status == "unhealthy" for status in services.values()):
         health_status["status"] = "degraded"
 
     return health_status
@@ -540,28 +842,41 @@ async def get_metrics():
     Returns:
         Performance metrics dictionary
     """
-    # TODO: Implement actual metrics collection
+    telemetry = logger_service.get_metrics_summary() if logger_service else {}
+    portfolio_snapshot: Dict[str, Any] = {}
+    if portfolio_manager:
+        try:
+            portfolio_snapshot = portfolio_manager.get_portfolio_summary()
+        except Exception as exc:
+            logger.error(f"Failed to gather portfolio metrics: {exc}")
+
+    uptime_seconds = int((datetime.now() - APP_START_TIME).total_seconds())
+
+    cache_status = None
+    if cache_manager and hasattr(cache_manager, "health_check"):
+        try:
+            cache_status = cache_manager.health_check()
+        except Exception:
+            cache_status = False
+
+    cache_health = "unknown"
+    if cache_status is True:
+        cache_health = "healthy"
+    elif cache_status is False:
+        cache_health = "unhealthy"
+
     metrics = {
         "timestamp": datetime.now().isoformat(),
-        "trading": {
-            "total_trades": 0,
-            "successful_trades": 0,
-            "failed_trades": 0,
-            "win_rate": 0.0
+        "uptime_seconds": uptime_seconds,
+        "logger_metrics": telemetry,
+        "portfolio": portfolio_snapshot,
+        "trade_stream": {
+            "subscribers": await trade_stream_manager.count_subscribers()
         },
-        "portfolio": {
-            "total_value": 100000.0,
-            "cash": 95000.0,
-            "positions_value": 5000.0,
-            "pnl": 0.0
-        },
-        "system": {
-            "uptime_seconds": 3600,
-            "memory_usage_mb": 150.5,
-            "cpu_usage_percent": 25.3
+        "dependencies": {
+            "cache": cache_health
         }
     }
-
     return metrics
 
 @app.get("/protected")
