@@ -46,10 +46,8 @@ async def get_candles(
         ).order_by(Candle.timestamp.desc()).limit(limit).all()
 
         if not candles:
-            # Generate mock data if no real data exists
+            # Generate only the amount of mock data the client requested to avoid long processing.
             end_time = datetime.utcnow()
-            start_time = end_time - timedelta(days=30)  # Last 30 days
-
             interval_minutes = {
                 "1m": 1,
                 "5m": 5,
@@ -60,30 +58,35 @@ async def get_candles(
                 "1d": 1440
             }.get(interval, 1440)
 
+            requested_points = limit + 5  # add a small buffer so we can slice the latest `limit` values reliably
+            start_time = end_time - timedelta(minutes=interval_minutes * requested_points)
+
             mock_candles = simulator.generate_candles(
                 symbol, start_time, end_time, interval_minutes
             )
 
-            # Convert to Candle objects and save to DB
-            for mock_candle in mock_candles[-limit:]:
-                candle = Candle(
+            # Persist just the subset of candles that will actually be returned.
+            candles_to_store = mock_candles[-limit:]
+            candle_batch = [
+                Candle(
                     symbol=symbol,
-                    timestamp=datetime.fromtimestamp(mock_candle["timestamp"] / 1000),
-                    open=mock_candle["open"],
-                    high=mock_candle["high"],
-                    low=mock_candle["low"],
-                    close=mock_candle["close"],
-                    volume=mock_candle["volume"]
+                    timestamp=datetime.fromtimestamp(entry["timestamp"] / 1000),
+                    open=entry["open"],
+                    high=entry["high"],
+                    low=entry["low"],
+                    close=entry["close"],
+                    volume=entry["volume"],
                 )
-                session.add(candle)
-
+                for entry in candles_to_store
+            ]
+            session.add_all(candle_batch)
             session.commit()
 
             # Return mock data
             return CandleResponse(
                 symbol=symbol,
                 interval=interval,
-                data=[CandleEntry(**entry) for entry in mock_candles[-limit:]],
+                data=[CandleEntry(**entry) for entry in candles_to_store],
             ).model_dump()
 
         # Return database data
