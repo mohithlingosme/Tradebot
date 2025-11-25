@@ -1,7 +1,9 @@
 """System diagnostics router."""
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from ..core.dependencies import get_current_admin_user
+from ..schemas.user import UserPublic
 from ..services.system_service import system_service
 from ..schemas.system import LogsResponse, MetricsResponse, StatusResponse
 
@@ -22,12 +24,13 @@ async def get_logs(
         description="Log level filter",
     ),
     limit: int = Query(25, ge=1, le=200),
+    _: UserPublic = Depends(get_current_admin_user),
 ):
     """Fetch recent log entries."""
     return await system_service.get_logs(level=level, limit=limit)
 
 
 @router.get("/metrics", response_model=MetricsResponse)
-async def get_metrics():
+async def get_metrics(_: UserPublic = Depends(get_current_admin_user)):
     """Runtime metrics for dashboarding."""
     return await system_service.get_metrics()

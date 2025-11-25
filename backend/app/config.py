@@ -1,7 +1,9 @@
 """Centralized application configuration for the backend service."""
 
 from functools import lru_cache
-from pydantic import BaseSettings
+import secrets
+
+from pydantic import BaseSettings, Field
 
 
 class Settings(BaseSettings):
@@ -19,6 +21,19 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:5173",
     ]
+
+    jwt_secret_key: str = Field(
+        default_factory=lambda: secrets.token_urlsafe(32),
+        env="JWT_SECRET_KEY",
+    )
+    jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
+    access_token_expire_minutes: int = Field(
+        default=60, env="JWT_ACCESS_TOKEN_EXPIRE_MINUTES"
+    )
+    default_admin_username: str = Field(default="admin", env="DEFAULT_ADMIN_USERNAME")
+    default_admin_password: str = Field(default="adminpass", env="DEFAULT_ADMIN_PASSWORD")
+    default_user_username: str = Field(default="user", env="DEFAULT_USER_USERNAME")
+    default_user_password: str = Field(default="userpass", env="DEFAULT_USER_PASSWORD")
 
     class Config:
         env_file = ".env"

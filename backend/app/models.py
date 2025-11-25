@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 
 class Candle(SQLModel, table=True):
     """Market data candle model."""
@@ -30,3 +30,4 @@ class User(SQLModel, table=True):
     hashed_password: str
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    role: Literal["admin", "user"] = Field(default="user", index=True)

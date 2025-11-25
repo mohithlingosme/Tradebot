@@ -11,7 +11,7 @@ from .database import create_db_and_tables
 from .routes import router
 from .routes_ai import router as ai_router
 from .payments.routes import router as payments_router
-from .routers import health, portfolio, positions, strategy, system, trades
+from .routers import auth, health, portfolio, positions, strategy, system, trades
 from .sim import simulator
 from .telemetry import RequestTimingMiddleware, configure_sentry
 from .security.middleware import EnforceHTTPSMiddleware, SecurityHeadersMiddleware
@@ -43,6 +43,7 @@ app.include_router(ai_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
 
 # New layered routers
+app.include_router(auth.router)
 app.include_router(health.router)
 app.include_router(system.router)
 app.include_router(portfolio.router)

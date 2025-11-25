@@ -3,6 +3,7 @@ from typing import Generator
 from sqlmodel import SQLModel, Session, create_engine
 
 from .config import settings
+from .services.user_service import user_service
 
 engine = create_engine(
     settings.database_url,
@@ -16,6 +17,8 @@ engine = create_engine(
 def create_db_and_tables() -> None:
     """Create database tables."""
     SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        user_service.ensure_default_users(session)
 
 
 def get_session() -> Generator[Session, None, None]:
