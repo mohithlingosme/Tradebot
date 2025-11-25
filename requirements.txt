@@ -1,4 +1,4 @@
-# Core dependencies for Finbot Trading System
+,.# Core dependencies for Finbot Trading System
 
 # Web Framework
 fastapi==0.104.1
