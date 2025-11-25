@@ -5,21 +5,23 @@ Integrates the market_data_ingestion module with the Finbot backend API.
 """
 
 import logging
-from typing import Optional, List
 import os
+from typing import List, Optional, TYPE_CHECKING
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 # Try to import market data ingestion modules
 try:
-from market_data_ingestion.core.storage import DataStorage
-from market_data_ingestion.src.metrics import metrics_collector
-from market_data_ingestion.src.settings import settings as ingestion_settings
+    from market_data_ingestion.core.storage import DataStorage
+    from market_data_ingestion.src.metrics import metrics_collector
+    from market_data_ingestion.src.settings import settings as ingestion_settings
+
     MARKET_DATA_AVAILABLE = True
 except ImportError:
+    DataStorage = None  # type: ignore
     MARKET_DATA_AVAILABLE = False
     logger.warning("market_data_ingestion module not available")
 

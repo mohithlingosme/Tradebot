@@ -3,13 +3,22 @@
 import logging
 from typing import Any
 
-import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 from .config import settings
+
+try:
+    import sentry_sdk  # type: ignore
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+except ImportError:  # pragma: no cover - optional dependency
+    sentry_sdk = None  # type: ignore
+
+    class FastApiIntegration:
+        """Placeholder when sentry-sdk is not installed."""
+
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +42,11 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 
 
 def configure_sentry() -> None:
-    """Configure Sentry if DSN is provided."""
-    if settings.sentry_dsn:
-        sentry_sdk.init(dsn=settings.sentry_dsn, integrations=[FastApiIntegration()], traces_sample_rate=0.2)
+    """Configure Sentry if DSN is provided and available."""
+    if settings.sentry_dsn and sentry_sdk is not None:
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            integrations=[FastApiIntegration()],
+            traces_sample_rate=0.2,
+        )
         logger.info("Sentry initialized")

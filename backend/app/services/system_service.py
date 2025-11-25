@@ -34,8 +34,19 @@ class SystemService:
             ],
         )
 
-    async def get_logs(self, level: str, limit: int) -> LogsResponse:
-        entries = await log_manager.fetch_recent_logs(level, limit)
+    async def get_logs(
+        self,
+        level: str,
+        limit: int,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> LogsResponse:
+        entries = await log_manager.fetch_recent_logs(
+            level=level,
+            limit=limit,
+            since=since,
+            until=until,
+        )
         return LogsResponse(entries=entries, total=len(entries))
 
     async def get_metrics(self) -> MetricsResponse:

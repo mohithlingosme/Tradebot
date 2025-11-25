@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
 import logging
+import os
+from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from typing import Dict, List
 
@@ -15,9 +17,36 @@ from .routers import auth, health, portfolio, positions, strategy, system, trade
 from .sim import simulator
 from .telemetry import RequestTimingMiddleware, configure_sentry
 from .security.middleware import EnforceHTTPSMiddleware, SecurityHeadersMiddleware
+def configure_logging() -> None:
+    """Setup file + console logging with rotation."""
+    level_name = settings.log_level.upper()
+    level = getattr(logging, level_name, logging.INFO)
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+    log_dir = os.path.dirname(settings.log_file)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+    file_handler = RotatingFileHandler(
+        settings.log_file,
+        maxBytes=settings.log_max_bytes,
+        backupCount=settings.log_backup_count,
+    )
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+
+    root_logger = logging.getLogger()
+    root_logger.handlers = []
+    root_logger.setLevel(level)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+
+
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name, version="1.1.0")

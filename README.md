@@ -76,6 +76,15 @@ docker compose -f infrastructure/docker-compose.yml up --build
 ```
 The compose file spins up the backend API, PostgreSQL, and the ingestion profiles (dev, staging, sandbox).
 
+## Staging Deployment
+- Rebuild and start the staging profile locally with:
+  ```bash
+  docker compose -f infrastructure/docker-compose.yml --profile staging up -d --build backend_api market_data_ingestion_staging
+  # or use the helper: ./infrastructure/scripts/deploy_staging.sh
+  ```
+- The `.github/workflows/ci-cd.yml` job `deploy-staging` builds and pushes `ghcr.io/<org>/<repo>:staging` and then invokes `infrastructure/scripts/deploy_staging.sh` to refresh the staging stack.
+- Run the observability checklist (`/health`, `/api/metrics`, `/api/logs`) documented at `docs/ops/staging_checklist.md` after every deploy.
+
 ## Documentation
 - `docs/README_FINBOT.md`: High-level product overview and usage guidance
 - `docs/README_MARKET_DATA.md`: Ingestion deployment notes and operational checklists

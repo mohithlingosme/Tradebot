@@ -3,7 +3,8 @@
 from functools import lru_cache
 import secrets
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -21,6 +22,12 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://localhost:5173",
     ]
+
+    log_level: str = Field("INFO", env="LOG_LEVEL")
+    log_file: str = Field("logs/finbot.log", env="LOG_FILE")
+    log_max_bytes: int = Field(10_485_760, env="LOG_MAX_SIZE")
+    log_backup_count: int = Field(5, env="LOG_BACKUP_COUNT")
+    log_scan_limit: int = Field(2000, env="LOG_SCAN_LIMIT")
 
     jwt_secret_key: str = Field(
         default_factory=lambda: secrets.token_urlsafe(32),

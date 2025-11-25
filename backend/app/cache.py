@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
@@ -38,6 +39,7 @@ def cached(key_builder: Callable[P, str]) -> Callable[[Callable[P, Awaitable[T]]
     """Decorator that caches async call results both locally and in Redis."""
 
     def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+        @functools.wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             cache_key = key_builder(*args, **kwargs)
 

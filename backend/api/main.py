@@ -20,15 +20,18 @@ Endpoints:
 """
 
 import asyncio
+import json
 import logging
 import os
+import re
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -37,8 +40,12 @@ from sqlalchemy.exc import SQLAlchemyError
 logger = logging.getLogger(__name__)
 
 from .auth import (
-    UserCredentials, TokenResponse, authenticate_user,
-    create_access_token, get_current_active_user
+    UserCredentials,
+    TokenResponse,
+    authenticate_user,
+    create_access_token,
+    get_current_active_user,
+    get_current_admin_user,
 )
 from ..config import settings
 try:
@@ -113,6 +120,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Lightweight latency observer to keep responses fast.
+@app.middleware("http")
+async def add_process_time_header(request, call_next):
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    process_time_ms = (time.perf_counter() - start_time) * 1000
+    response.headers["X-Process-Time-ms"] = f"{process_time_ms:.2f}"
+    if process_time_ms > 150:
+        logger.warning(f"Slow response {request.url.path}: {process_time_ms:.2f}ms")
+    return response
+
 # Global service instances (in production, use dependency injection)
 strategy_manager = StrategyManager() if StrategyManager else None
 portfolio_manager = PortfolioManager({
@@ -134,6 +152,35 @@ live_trading_engine = LiveTradingEngine(
     strategy_manager=strategy_manager,
     portfolio_manager=portfolio_manager
 ) if LiveTradingEngine else None
+
+class LogEntry(BaseModel):
+    """Structured log entry returned by the /logs endpoint."""
+
+    timestamp: datetime
+    level: str
+    message: str
+    logger: Optional[str] = None
+    trace_id: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+
+
+_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_SECRET_KEYS = ("token", "secret", "password", "api_key", "apikey", "authorization", "bearer")
+_SECRET_PATTERN = re.compile(r"(?i)(token|secret|password|api[_-]?key|authorization|bearer)[:=\s]+([^\s]+)")
+
+
+def _mask_sensitive(value: Any) -> Any:
+    """Mask obvious secrets in strings or dicts to avoid leaking credentials through the API."""
+    if isinstance(value, str):
+        return _SECRET_PATTERN.sub(lambda m: f"{m.group(1)}=***", value)
+    if isinstance(value, dict):
+        return {
+            key: ("***" if any(k in key.lower() for k in _SECRET_KEYS) else _mask_sensitive(val))
+            for key, val in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask_sensitive(item) for item in value]
+    return value
 
 
 class TradeStreamManager:
@@ -160,10 +207,6 @@ class TradeStreamManager:
         for queue in subscribers:
             try:
                 queue.put_nowait(message)
-
-    async def count_subscribers(self) -> int:
-        async with self._lock:
-            return len(self._subscribers)
             except asyncio.QueueFull:
                 # Drop oldest message to keep stream moving
                 try:
@@ -171,6 +214,10 @@ class TradeStreamManager:
                 except asyncio.QueueEmpty:
                     pass
                 queue.put_nowait(message)
+
+    async def count_subscribers(self) -> int:
+        async with self._lock:
+            return len(self._subscribers)
 
 
 trade_stream_manager = TradeStreamManager()
@@ -505,95 +552,137 @@ async def get_trading_history(limit: int = 50):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/logs")
-async def get_logs(lines: int = 100):
+async def get_logs(
+    level: Optional[str] = Query(None, description="Filter by level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"),
+    limit: int = Query(100, ge=1, le=500, description="Number of log entries to return (max 500)"),
+    since: Optional[datetime] = Query(None, description="Return entries after this timestamp"),
+    until: Optional[datetime] = Query(None, description="Return entries before this timestamp"),
+    current_admin: Dict = Depends(get_current_admin_user),
+):
     """
-    Get recent log entries with structured parsing.
-
-    Args:
-        lines: Number of log lines to return
-
-    Returns:
-        List of structured log entries
+    Return structured log entries with filtering and masking of sensitive data.
     """
     try:
-        import os
-        import re
-        import json
-        log_file = "logs/finbot.log"
+        log_file = Path(settings.log_file)
+        if not log_file.exists():
+            return {"logs": [], "total_lines": 0, "message": "No log file found"}
 
-        if not os.path.exists(log_file):
-            return {"logs": [], "message": "No log file found"}
+        requested_level = level.upper() if level else None
+        if requested_level and requested_level not in _LOG_LEVELS:
+            raise HTTPException(status_code=422, detail="Invalid log level filter")
 
-        with open(log_file, 'r') as f:
-            all_lines = f.readlines()
+        # Normalize datetime filters to naive UTC for comparison
+        if since and since.tzinfo:
+            since = since.replace(tzinfo=None)
+        if until and until.tzinfo:
+            until = until.replace(tzinfo=None)
 
-        # Get the last 'lines' entries
-        recent_lines = all_lines[-lines:] if len(all_lines) > lines else all_lines
+        try:
+            all_lines = log_file.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            logger.error(f"Unable to read log file {log_file}: {exc}")
+            raise HTTPException(status_code=500, detail="Unable to read log file")
 
-        # Parse log entries with structured parsing
-        log_entries = []
-        for line in recent_lines:
-            line = line.strip()
-            if line:
-                # Parse log line: timestamp - name - level - message
-                match = re.match(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - ([^-]+) - ([^-]+) - (.+)$', line)
-                if match:
-                    timestamp, logger_name, level, message = match.groups()
+        log_entries: List[LogEntry] = []
+        line_pattern = re.compile(
+            r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) - (?P<logger>[^-]+) - (?P<level>[^-]+) - (?P<message>.+)$"
+        )
+        for raw_line in reversed(all_lines):  # Start from newest
+            if not raw_line.strip():
+                continue
 
-                    # Parse component from message: [component] actual_message
-                    component_match = re.match(r'^\[([^\]]+)\]\s*(.+)$', message)
-                    if component_match:
-                        component = component_match.group(1)
-                        actual_message = component_match.group(2)
-                    else:
-                        component = logger_name
-                        actual_message = message
+            parsed_entry: Optional[LogEntry] = None
 
-                    # Parse additional fields: | Data: json | Trace: id | Duration: ms
-                    data = {}
-                    trace_id = None
-                    duration_ms = None
+            # Attempt JSON log parsing first
+            try:
+                as_json = json.loads(raw_line)
+                if isinstance(as_json, dict) and {"timestamp", "level", "message"} <= set(as_json.keys()):
+                    timestamp = datetime.fromisoformat(as_json["timestamp"])
+                    parsed_entry = LogEntry(
+                        timestamp=timestamp,
+                        level=str(as_json.get("level", "")).upper(),
+                        message=_mask_sensitive(as_json.get("message", "")),
+                        logger=str(as_json.get("logger", "")) or None,
+                        trace_id=as_json.get("trace_id"),
+                        extra=_mask_sensitive({k: v for k, v in as_json.items() if k not in {"timestamp", "level", "message", "logger", "trace_id"}}),
+                    )
+            except (json.JSONDecodeError, ValueError):
+                parsed_entry = None
 
-                    # Split by ' | ' to get additional fields
-                    parts = actual_message.split(' | ')
-                    actual_message = parts[0]
+            if not parsed_entry:
+                match = line_pattern.match(raw_line.strip())
+                if not match:
+                    continue
 
-                    for part in parts[1:]:
-                        if part.startswith('Data: '):
-                            try:
-                                data = json.loads(part[6:])  # Remove 'Data: '
-                            except json.JSONDecodeError:
-                                data = {'raw_data': part[6:]}
-                        elif part.startswith('Trace: '):
-                            trace_id = part[7:]  # Remove 'Trace: '
-                        elif part.startswith('Duration: '):
-                            try:
-                                duration_ms = float(part[10:].replace('ms', ''))  # Remove 'Duration: ' and 'ms'
-                            except ValueError:
-                                duration_ms = None
+                timestamp_str = match.group("timestamp")
+                logger_name = match.group("logger").strip()
+                level_name = match.group("level").strip().upper()
+                message = match.group("message").strip()
 
-                    log_entries.append({
-                        "timestamp": timestamp,
-                        "level": level,
-                        "component": component,
-                        "message": actual_message,
-                        "data": data,
-                        "trace_id": trace_id,
-                        "duration_ms": duration_ms
-                    })
-                else:
-                    # Fallback for unparseable lines
-                    log_entries.append({
-                        "timestamp": "unknown",
-                        "level": "unknown",
-                        "component": "unknown",
-                        "message": line,
-                        "data": {},
-                        "trace_id": None,
-                        "duration_ms": None
-                    })
+                try:
+                    timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S,%f")
+                except ValueError:
+                    continue
 
-        return {"logs": log_entries, "total_lines": len(all_lines)}
+                component_match = re.match(r"^\[(?P<component>[^\]]+)\]\s*(?P<body>.*)$", message)
+                component = component_match.group("component") if component_match else None
+                body = component_match.group("body") if component_match else message
+
+                data: Dict[str, Any] = {}
+                trace_id = None
+                duration_ms = None
+
+                parts = [part.strip() for part in body.split("|")]
+                message_body = parts[0]
+
+                for part in parts[1:]:
+                    if part.lower().startswith("data:"):
+                        raw_data = part.split(":", 1)[1].strip()
+                        try:
+                            data = json.loads(raw_data)
+                        except json.JSONDecodeError:
+                            data = {"raw": raw_data}
+                    elif part.lower().startswith("trace:"):
+                        trace_id = part.split(":", 1)[1].strip()
+                    elif part.lower().startswith("duration:"):
+                        duration_raw = part.split(":", 1)[1].strip().lower().replace("ms", "")
+                        try:
+                            duration_ms = float(duration_raw)
+                        except ValueError:
+                            duration_ms = None
+
+                extra: Dict[str, Any] = {"component": component or logger_name}
+                if data:
+                    extra["data"] = _mask_sensitive(data)
+                if duration_ms is not None:
+                    extra["duration_ms"] = duration_ms
+
+                parsed_entry = LogEntry(
+                    timestamp=timestamp,
+                    level=level_name,
+                    message=_mask_sensitive(message_body),
+                    logger=logger_name,
+                    trace_id=trace_id,
+                    extra=_mask_sensitive(extra),
+                )
+
+            if requested_level and parsed_entry.level.upper() != requested_level:
+                continue
+            if since and parsed_entry.timestamp < since:
+                continue
+            if until and parsed_entry.timestamp > until:
+                continue
+
+            log_entries.append(parsed_entry)
+            if len(log_entries) >= limit:
+                break
+
+        return {
+            "logs": [entry.dict() for entry in log_entries],
+            "total_lines": len(all_lines),
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error getting logs: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -653,7 +742,7 @@ async def login(credentials: UserCredentials):
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data={"sub": user.username, "role": getattr(user, "role", "user")})
     return TokenResponse(access_token=access_token, expires_in=1800)
 
 @app.post("/auth/logout")
@@ -706,11 +795,12 @@ async def register(request: RegisterRequest):
     USER_DATABASE[request.username] = {
         "username": request.username,
         "email": request.email,
-        "hashed_password": hashed_password
+        "hashed_password": hashed_password,
+        "role": "user",
     }
     
     # Create token
-    access_token = create_access_token(data={"sub": request.username})
+    access_token = create_access_token(data={"sub": request.username, "role": "user"})
     logger.info(f"New user registered: {request.username}")
     
     return TokenResponse(access_token=access_token, expires_in=1800)
@@ -880,6 +970,63 @@ async def get_metrics():
         }
     }
     return metrics
+
+# API router providing namespaced endpoints
+api_router = APIRouter(prefix="/api", tags=["api"])
+
+
+@api_router.get("/health")
+async def api_health():
+    return await get_health()
+
+
+@api_router.get("/status")
+async def api_status():
+    return await get_status()
+
+
+@api_router.get("/metrics")
+async def api_metrics():
+    return await get_metrics()
+
+
+@api_router.get("/portfolio")
+async def api_portfolio():
+    return await get_portfolio()
+
+
+@api_router.get("/positions")
+async def api_positions():
+    return await get_positions()
+
+
+@api_router.post("/trades")
+async def api_trades(trade: TradeRequest, current_user: Dict = Depends(get_current_active_user)):
+    return await place_trade(trade, current_user)
+
+
+@api_router.post("/strategy/start")
+async def api_strategy_start(strategy_name: str):
+    return await manage_strategy("activate", strategy_name)
+
+
+@api_router.post("/strategy/stop")
+async def api_strategy_stop(strategy_name: str):
+    return await manage_strategy("deactivate", strategy_name)
+
+
+@api_router.get("/logs")
+async def api_logs(
+    level: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    current_admin: Dict = Depends(get_current_admin_user),
+):
+    return await get_logs(level=level, limit=limit, since=since, until=until, current_admin=current_admin)
+
+
+app.include_router(api_router)
 
 @app.get("/protected")
 async def protected_endpoint(current_user: Dict = Depends(get_current_active_user)):

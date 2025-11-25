@@ -24,24 +24,25 @@ A unified roadmap for building a fully automated, broker-independent, intelligen
 
 ## 📌 PHASE 1 – Backend Core (FastAPI)
 
-### 🟦 1.1 API Endpoints
-- [ ] Organize code: `routers/`, `services/`, `schemas/`, `managers/`
-- [ ] Implement endpoints:
-- [ ] `/api/health`
-- [ ] `/api/status`
-- [ ] `/api/logs`
-- [ ] `/api/metrics`
-- [ ] `/api/portfolio`
-- [ ] `/api/positions`
-- [ ] `/api/trades`
-- [ ] `/api/strategy/start`
-- [ ] `/api/strategy/stop`
-- [ ] Optimize API response time (<150ms)
+### 🟦 Issue #10 Plan
+- Tail the structured backend log file (`logs/finbot.log`) in the system manager, parse its JSON-rich entries, and expose admin-only filters (`level`, `limit`, `since`, `until`) through `/api/logs` via a `LogEntry` schema.
+- Cover the FastAPI surface with JWT role tests so `/api/portfolio`, `/api/positions`, `/api/trades`, `/api/strategy/*`, `/api/metrics`, and `/api/logs` reject unauthenticated/non-admin access but work with valid tokens.
+- Keep CI green by running the new backend integration suite, tagging and pushing backend images, and adding a controlled `deploy-staging` job that pushes the staging-tagged image and runs the deployment script.
+- Capture the staging deployment and observability steps in docs (commands plus health/metrics/log checks) so operators can verify monitoring after each rollout.
 
-### 🟦 1.2 Authentication
-- [ ] JWT-based login/logout
-- [ ] Role-based access (admin/user)
-- [ ] Secure all protected endpoints
+### 🟦 1.1 API Endpoints
+- [x] Organize code: `routers/`, `services/`, `schemas/`, `managers/`
+- [x] Implement endpoints:
+- [x] `/api/health`
+- [x] `/api/status`
+- [x] `/api/logs`
+- [x] `/api/metrics`
+- [x] `/api/portfolio`
+- [x] `/api/positions`
+- [x] `/api/trades`
+- [x] `/api/strategy/start`
+- [x] `/api/strategy/stop`
+- [x] Optimize API response time (<150ms)
 
 ---
 

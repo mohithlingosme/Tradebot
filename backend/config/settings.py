@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Sequence
 
-from pydantic import BaseSettings, Field, validator
+try:
+    # Prefer pydantic v1-style import
+    from pydantic import BaseSettings  # type: ignore
+except Exception:  # pragma: no cover - executed under Pydantic v2
+    try:
+        from pydantic_settings import BaseSettings  # type: ignore
+    except Exception:
+        # Fallback to BaseModel to keep runtime working in minimal environments
+        from pydantic import BaseModel as BaseSettings  # type: ignore
+
+from pydantic import Field, validator
 
 DEFAULT_ORIGINS = ["http://localhost:8501", "http://localhost:5173", "http://localhost:3000"]
 DEFAULT_NEWS_SOURCES = [

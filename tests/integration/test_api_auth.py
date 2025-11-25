@@ -6,18 +6,18 @@ import unittest
 import json
 import sys
 import os
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 import httpx
 import asyncio
 from fastapi.testclient import TestClient
 
-# Add backend package to path
-backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
-sys.path.insert(0, backend_path)
+# Add repository root to path so backend package resolves
+repo_root = os.path.join(os.path.dirname(__file__), "..", "..")
+sys.path.insert(0, repo_root)
 
 # Import with type ignore for linter - path is added at runtime
-from api.main import app  # type: ignore
-from api.auth import UserCredentials  # type: ignore
+from backend.api.main import app  # type: ignore
+from backend.api.auth import UserCredentials  # type: ignore
 
 
 class TestAPIAuthentication(unittest.TestCase):
@@ -92,13 +92,14 @@ class TestProtectedEndpoints(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    def _get_auth_token(self):
+    def _get_auth_token(self, username: str = "admin", password: str | None = None):
         """Helper to get authentication token"""
         credentials = {
-            "username": "admin",
-            "password": "admin123"
+            "username": username,
+            "password": password or ("admin123" if username == "admin" else "trader123"),
         }
         response = self.client.post("/auth/login", json=credentials)
+        self.assertEqual(response.status_code, 200)
         return response.json()["access_token"]
 
     def test_protected_endpoint_authenticated(self):
@@ -192,6 +193,17 @@ class TestPublicEndpoints(unittest.TestCase):
 
     def setUp(self):
         self.client = TestClient(app)
+        self.admin_token = self._get_auth_token("admin", "admin123")
+        self.user_token = self._get_auth_token("trader", "trader123")
+
+    def _get_auth_token(self, username: str = "admin", password: str | None = None):
+        credentials = {
+            "username": username,
+            "password": password or ("admin123" if username == "admin" else "trader123"),
+        }
+        response = self.client.post("/auth/login", json=credentials)
+        self.assertEqual(response.status_code, 200)
+        return response.json()["access_token"]
 
     def test_root_endpoint(self):
         """Test root endpoint"""
@@ -230,22 +242,35 @@ class TestPublicEndpoints(unittest.TestCase):
         self.assertIn("portfolio", data)
         self.assertIn("system", data)
 
-    @patch('os.path.exists')
+    def test_logs_endpoint_requires_auth(self):
+        """Ensure logs endpoint enforces authentication"""
+        response = self.client.get("/logs")
+        self.assertEqual(response.status_code, 403)
+
+    def test_logs_endpoint_forbidden_for_non_admin(self):
+        """Ensure non-admin users cannot access logs"""
+        headers = {"Authorization": f"Bearer {self.user_token}"}
+        response = self.client.get("/logs", headers=headers)
+        self.assertEqual(response.status_code, 403)
+
+    @patch("pathlib.Path.exists")
     def test_logs_endpoint_no_file(self, mock_exists):
         """Test logs endpoint when no log file exists"""
         mock_exists.return_value = False
+        headers = {"Authorization": f"Bearer {self.admin_token}"}
 
-        response = self.client.get("/logs")
+        response = self.client.get("/logs", headers=headers)
         self.assertEqual(response.status_code, 200)
 
         data = response.json()
         self.assertIn("logs", data)
+        self.assertEqual(data.get("total_lines"), 0)
         self.assertIn("message", data)
         self.assertEqual(data["message"], "No log file found")
 
-    @patch('os.path.exists')
-    @patch('builtins.open')
-    def test_logs_endpoint_with_file(self, mock_open, mock_exists):
+    @patch("pathlib.Path.read_text")
+    @patch("pathlib.Path.exists")
+    def test_logs_endpoint_with_file(self, mock_exists, mock_read_text):
         """Test logs endpoint with existing log file"""
         mock_exists.return_value = True
 
@@ -254,11 +279,10 @@ class TestPublicEndpoints(unittest.TestCase):
 2023-01-01 10:01:00,000 - finbot - ERROR - [execution] Connection failed | Data: {"error": "timeout"}
 2023-01-01 10:02:00,000 - finbot - WARNING - Low memory warning"""
 
-        mock_file = Mock()
-        mock_file.readlines.return_value = mock_log_content.split('\n')
-        mock_open.return_value.__enter__.return_value = mock_file
+        mock_read_text.return_value = mock_log_content
 
-        response = self.client.get("/logs")
+        headers = {"Authorization": f"Bearer {self.admin_token}"}
+        response = self.client.get("/logs", headers=headers)
         self.assertEqual(response.status_code, 200)
 
         data = response.json()
@@ -266,32 +290,32 @@ class TestPublicEndpoints(unittest.TestCase):
         self.assertIn("total_lines", data)
         self.assertEqual(len(data["logs"]), 3)
 
-        # Check first log entry
-        first_log = data["logs"][0]
-        self.assertEqual(first_log["level"], "INFO")
-        self.assertEqual(first_log["component"], "strategy")
-        self.assertEqual(first_log["message"], "System started")
-        self.assertEqual(first_log["data"], {"key": "value"})
-        self.assertEqual(first_log["trace_id"], "abc123")
-        self.assertEqual(first_log["duration_ms"], 150.5)
+        logs_by_message = {entry["message"]: entry for entry in data["logs"]}
 
-        # Check second log entry
-        second_log = data["logs"][1]
-        self.assertEqual(second_log["level"], "ERROR")
-        self.assertEqual(second_log["component"], "execution")
-        self.assertEqual(second_log["message"], "Connection failed")
-        self.assertEqual(second_log["data"], {"error": "timeout"})
-        self.assertIsNone(second_log["trace_id"])
-        self.assertIsNone(second_log["duration_ms"])
+        # Check warning (newest entry first)
+        warning_log = logs_by_message["Low memory warning"]
+        self.assertEqual(warning_log["level"], "WARNING")
+        self.assertEqual(warning_log["extra"]["component"], "finbot")
+        self.assertIsNone(warning_log.get("trace_id"))
 
-        # Check third log entry (no component, fallback)
-        third_log = data["logs"][2]
-        self.assertEqual(third_log["level"], "WARNING")
-        self.assertEqual(third_log["component"], "finbot")
-        self.assertEqual(third_log["message"], "Low memory warning")
-        self.assertEqual(third_log["data"], {})
-        self.assertIsNone(third_log["trace_id"])
-        self.assertIsNone(third_log["duration_ms"])
+        info_log = logs_by_message["System started"]
+        self.assertEqual(info_log["level"], "INFO")
+        self.assertEqual(info_log["extra"]["component"], "strategy")
+        self.assertEqual(info_log["extra"]["data"], {"key": "value"})
+        self.assertEqual(info_log["trace_id"], "abc123")
+
+        error_log = logs_by_message["Connection failed"]
+        self.assertEqual(error_log["level"], "ERROR")
+        self.assertEqual(error_log["extra"]["component"], "execution")
+        self.assertEqual(error_log["extra"]["data"], {"error": "timeout"})
+        self.assertIsNone(error_log["trace_id"])
+
+        # Validate level filtering works
+        filtered_response = self.client.get("/logs?level=ERROR&limit=1", headers=headers)
+        self.assertEqual(filtered_response.status_code, 200)
+        filtered_logs = filtered_response.json()["logs"]
+        self.assertEqual(len(filtered_logs), 1)
+        self.assertEqual(filtered_logs[0]["level"], "ERROR")
 
 
 class TestStrategyEndpoints(unittest.TestCase):

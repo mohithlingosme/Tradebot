@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
+
+from sqlalchemy import Column, JSON
 
 from sqlmodel import Field, SQLModel
 
@@ -11,7 +13,10 @@ class Plan(SQLModel, table=True):
     name: str
     price_inr: int
     interval: str = "monthly"
-    features: dict = Field(default_factory=dict, sa_column_kwargs={"nullable": False})
+    features: dict[str, Any] = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False),
+    )
 
 
 class Subscription(SQLModel, table=True):

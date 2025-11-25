@@ -1,7 +1,7 @@
 """Schemas for system-level responses."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -27,7 +27,9 @@ class LogEntry(BaseModel):
     timestamp: datetime
     level: str
     message: str
-    source: str
+    logger: str | None = None
+    trace_id: str | None = None
+    extra: dict[str, Any] | None = None
 
 
 class LogsResponse(BaseModel):
