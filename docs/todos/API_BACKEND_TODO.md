@@ -7,7 +7,7 @@ update# API / Backend Services Implementation - Issue #10
 - [x] Add GET /metrics for performance metrics
 
 ## 2. Authentication/Authorization
-- [x] Implement JWT-based authentication in finbot-backend/api/auth.py
+- [x] Implement JWT-based authentication in backend/api/auth.py
 - [x] Add POST /auth/login endpoint
 - [x] Add POST /auth/logout endpoint
 - [x] Secure sensitive endpoints with auth dependency
@@ -22,8 +22,8 @@ update# API / Backend Services Implementation - Issue #10
 - [x] Configure automated testing
 
 ## 5. Environments Configuration
-- [x] Create staging config file (finbot-backend/config/staging.yaml)
-- [x] Create production config file (finbot-backend/config/production.yaml)
+- [x] Create staging config file (backend/config/staging.yaml)
+- [x] Create production config file (backend/config/production.yaml)
 - [x] Environment-specific settings (DB, API keys, etc.)
 
 ## 6. Secrets Management

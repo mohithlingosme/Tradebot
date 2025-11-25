@@ -4,6 +4,7 @@ services:
   backend_api:
     build:
       context: ./backend
+      dockerfile: Dockerfile
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
@@ -34,7 +35,9 @@ services:
       retries: 3
 
   market_data_ingestion:
-    build: .
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile
     volumes:
       - .:/app
     ports:
@@ -61,7 +64,9 @@ services:
 
   # Staging environment
   market_data_ingestion_staging:
-    build: .
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile
     volumes:
       - .:/app
     ports:
@@ -92,7 +97,9 @@ services:
 
   # Sandbox environment for MVP
   market_data_ingestion_sandbox:
-    build: .
+    build:
+      context: .
+      dockerfile: infrastructure/Dockerfile
     volumes:
       - .:/app
     ports:

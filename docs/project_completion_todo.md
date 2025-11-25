@@ -12,7 +12,7 @@ This checklist consolidates the remaining work needed to ship a production-ready
 - [ ] Achieve test coverage targets with unit, integration, e2e, and data-quality checks.
 
 ## Architecture & Monorepo Hygiene
-- [ ] Confirm directory boundaries for `/backend`, `/finbot-backend`, `/market_data_ingestion`, `/trading_engine`, `/frontend`, and `/finbot-frontend` to reduce duplication.
+- [ ] Confirm directory boundaries for `/backend`, `/backend`, `/market_data_ingestion`, `/trading_engine`, `/frontend`, and `/finbot-frontend` to reduce duplication.
 - [ ] Standardize config schema (pydantic settings) reused by services; document required keys.
 - [ ] Add dependency baselines: `requirements-dev.txt`, lockfiles, and pre-commit hooks.
 - [ ] Update architecture diagrams to reflect current services, message flows, and data stores.

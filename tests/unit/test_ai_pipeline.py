@@ -1,7 +1,7 @@
 import pytest
 
-from backend.app.ai.pipeline import FinbotAIPipeline
-from backend.app.ai.safety import SafetyLayer
+from ai_models.pipeline import FinbotAIPipeline
+from ai_models.safety import SafetyLayer
 
 
 class DummyModeration:

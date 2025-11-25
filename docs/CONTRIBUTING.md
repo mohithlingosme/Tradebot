@@ -26,7 +26,7 @@ Thank you for your interest in contributing to the Market Data Ingestion System!
 
 3. **Run database migrations:**
    ```bash
-   python migrate.py
+   python data_collector/scripts/migrate.py
    ```
 
 4. **Run tests to ensure everything works:**

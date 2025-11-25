@@ -13,6 +13,17 @@ setup(
         "sqlmodel==0.0.14",
         "alembic==1.13.1",
         "python-dotenv==1.0.0",
+        "pandas",
+        "numpy",
+        "scikit-learn",
+        "sqlalchemy",
+        "psutil",
+        "pytest",
+        "pytest-asyncio",
+        "yfinance",
+        "alpha-vantage",
+        "aiohttp",
+        "httpx",
     ],
     entry_points={
         "console_scripts": [

@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import uuid4, UUID
 
-from market_data.normalization.normalizer import DataNormalizer
+from data_collector.market_data.normalization.normalizer import DataNormalizer
 
 
 class TestDataNormalizer:

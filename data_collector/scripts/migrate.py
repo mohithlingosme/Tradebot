@@ -11,7 +11,8 @@ import sys
 from pathlib import Path
 
 # Add the project root to the Python path
-sys.path.insert(0, str(Path(__file__).parent))
+ROOT_PATH = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT_PATH))
 
 from market_data_ingestion.core.storage import DataStorage
 from market_data_ingestion.src.logging_config import setup_logging

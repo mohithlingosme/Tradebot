@@ -6,7 +6,7 @@ Complete the trading engine implementation with live data integration, enhanced 
 ## Tasks
 
 ### 1. Create Live Trading Engine Integration
-- [x] Create `finbot-backend/trading_engine/live_trading_engine.py`
+- [x] Create `backend/trading_engine/live_trading_engine.py`
 - [x] Implement LiveTradingEngine class that orchestrates real-time strategy execution
 - [x] Integrate with market_data_ingestion adapters (yfinance, alphavantage, kite_ws)
 - [x] Add data feed subscription and real-time signal generation
@@ -20,7 +20,7 @@ Complete the trading engine implementation with live data integration, enhanced 
 - [x] Update StructuredLogger integration for live trading events
 
 ### 3. Connect Services to API
-- [x] Update `finbot-backend/api/main.py` to connect actual service instances
+- [x] Update `backend/api/main.py` to connect actual service instances
 - [x] Wire up StrategyManager, PortfolioManager, and Logger services
 - [x] Implement WebSocket real-time updates for trading signals
 - [x] Add endpoints for live trading control (start/stop strategies)

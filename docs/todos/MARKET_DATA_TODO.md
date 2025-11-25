@@ -31,7 +31,7 @@ This TODO tracks the implementation of the market data ingestion system based on
 
 ## Phase 6: Testing and Integration
 - [ ] Test realtime ingestion for one symbol (AAPL or BTCUSDT)
-- [ ] Integrate with existing finbot-backend structure
+- [ ] Integrate with existing backend structure
 - [ ] Update main TODO.md to reflect completion of data ingestion module
 - [ ] Create backfill pipeline implementation
 - [ ] Add comprehensive error handling and logging

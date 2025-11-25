@@ -1,8 +1,8 @@
 import os
 import sys
 
-FINBOT_BACKEND_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "finbot-backend")
-sys.path.insert(0, os.path.abspath(FINBOT_BACKEND_PATH))
+BACKEND_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
+sys.path.insert(0, os.path.abspath(BACKEND_PATH))
 
 from core.ai_pipeline import AIPipeline, PromptRequest  # type: ignore
 from core.safety import SafetyContext, SafetyFilter  # type: ignore

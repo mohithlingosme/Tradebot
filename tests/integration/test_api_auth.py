@@ -11,9 +11,9 @@ import httpx
 import asyncio
 from fastapi.testclient import TestClient
 
-# Add finbot-backend to path
-finbot_backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'finbot-backend')
-sys.path.insert(0, finbot_backend_path)
+# Add backend package to path
+backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
+sys.path.insert(0, backend_path)
 
 # Import with type ignore for linter - path is added at runtime
 from api.main import app  # type: ignore

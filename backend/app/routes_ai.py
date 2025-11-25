@@ -3,8 +3,8 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .ai.pipeline import AIResponse, FinbotAIPipeline
-from .ai.safety import SafetyLayer
+from ai_models.pipeline import AIResponse, FinbotAIPipeline
+from ai_models.safety import SafetyLayer
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 

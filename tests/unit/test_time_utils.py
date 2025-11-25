@@ -5,7 +5,7 @@ Unit tests for time utilities.
 import pytest
 from datetime import datetime, timedelta
 
-from market_data.utils.time import (
+from data_collector.market_data.utils.time import (
     generate_time_chunks,
     align_to_granularity,
     get_candle_bucket_start,

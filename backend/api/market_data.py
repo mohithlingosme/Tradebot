@@ -1,7 +1,7 @@
 """
-Market Data API endpoints for finbot-backend
+Market Data API endpoints for the Finbot backend
 
-Integrates market_data_ingestion module with finbot-backend API.
+Integrates the market_data_ingestion module with the Finbot backend API.
 """
 
 import logging

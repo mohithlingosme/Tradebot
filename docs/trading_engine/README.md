@@ -72,7 +72,7 @@ Position sizes are calculated based on:
 ### Configuration
 
 ```python
-from finbot_backend.trading_engine import LiveTradingConfig, TradingMode
+from trading_engine import LiveTradingConfig, TradingMode
 
 config = LiveTradingConfig(
     mode=TradingMode.SIMULATION,  # SIMULATION, LIVE, PAPER_TRADING
@@ -97,7 +97,7 @@ config = LiveTradingConfig(
 ### Configuration
 
 ```python
-from finbot_backend.trading_engine import BacktestConfig
+from trading_engine import BacktestConfig
 from datetime import datetime
 
 config = BacktestConfig(
@@ -138,7 +138,7 @@ config = BacktestConfig(
 ### Basic Strategy Execution
 
 ```python
-from finbot_backend.trading_engine import StrategyManager, AdaptiveRSIMACDStrategy
+from trading_engine import StrategyManager, AdaptiveRSIMACDStrategy
 
 # Initialize strategy manager
 manager = StrategyManager()
@@ -176,10 +176,10 @@ print(f"Signal: {result['signal']}, Confidence: {result['confidence']}")
 
 ```python
 import asyncio
-from finbot_backend.trading_engine import (
+from trading_engine import (
     LiveTradingEngine, LiveTradingConfig, TradingMode
 )
-from finbot_backend.risk_management import PortfolioManager
+from backend.risk_management import PortfolioManager
 
 # Setup components
 portfolio = PortfolioManager({
@@ -271,7 +271,7 @@ Monitor execution performance:
 
 ```python
 import time
-from finbot_backend.monitoring import get_logger
+from backend.monitoring import get_logger
 
 logger = get_logger()
 

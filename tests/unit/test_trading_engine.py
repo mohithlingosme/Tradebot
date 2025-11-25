@@ -10,7 +10,8 @@ from unittest.mock import Mock, patch
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'finbot-backend'))
+backend_path = os.path.join(os.path.dirname(__file__), '..', '..', 'backend')
+sys.path.insert(0, backend_path)
 
 from trading_engine.strategy_manager import StrategyManager, BaseStrategy
 from trading_engine.strategies.adaptive_rsi_macd_strategy import AdaptiveRSIMACDStrategy
