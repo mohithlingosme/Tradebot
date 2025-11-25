@@ -1,0 +1,216 @@
+Technicals 
+Indicator’s
+
+
+24 hour volume 
+Accumulation / Distribution 
+Advance decline line 
+Advance decline ratio
+Advance / Decline ration (Bars) 
+Arnaud legoux moving average 
+Aroon  
+Auto fib extension 
+Auto fib retracement 
+Auto pitchfork 
+Auto trendlines 
+Average day range 
+Average directional index 
+Average true range 
+Awesome oscillator 
+Balance of power 
+BBTrend 
+Bollinger bands 
+Bollinger bands %b 
+Bollinger bandwidth 
+Bollinger bars 
+Bull bear power 
+Chaikin money flow 
+Chaikin oscillator 
+Chande kroll stop 
+Change momentum oscillator 
+Chop zone 
+Choppiness index 
+Commodity channel index 
+Connors RSI 
+Coppock curve 
+Correlation coefficient 
+Cumulative volume delta
+Cumulative volume index 
+Detrended price oscillator 
+Directional movement index 
+Donchain channels 
+Double EMS 
+Ease of movement 
+Elder force index 
+Envelope 
+Fisher transform 
+Gaps 
+Historical volatility 
+Hull moving average 
+Ichimoku cloud 
+Keltner channels 
+Klinger oscillator 
+Know sure thing 
+Least squares moving average 
+Linear regression channel 
+MA cross 
+Mass index 
+McGinley Dynamic 
+Median 
+Momentum 
+Money flow index
+Moon phases
+Moving average convergence divergence 
+Moving average exponential 
+Moving average ribbon 
+Moving average simple 
+Moving average weighted 
+Multi - time period charts 
+Net volume 
+On balance volume 
+Open interest 
+Parabolic SAR 
+Performance 
+Pivot points high low 
+Pivot points standard 
+Price oscillator 
+Price target
+Price volume trend 
+Rank correlation index 
+Rate of change 
+RCI Ribbon 
+Relative strengthIndex 
+Relative vigor index 
+Relative volatility index 
+Relative volume at time 
+Rob booker - intraday pivot points
+Rob booker - knoxville divergence 
+Rob booker -  Missed pivot points 
+Rob booker - Reversal 
+Rob booker - Ziv ghost pivots 
+RSI Divergence indicator 
+Seasonality 
+SMI Ergodic indicator 
+SMI Ergodic oscillator 
+Smoothed moving average 
+Stochastic 
+Stochastic momentum index 
+Stochastic RSI 
+Supertrend 
+Technical ratings 
+Time weighted average price 
+Trading sessions 
+Trend strength index 
+Tripe EMA 
+TRIX 
+True  strenght index 
+Ultimate oscillator 
+Up / Down Volume 
+Visible average price 
+Volume 
+Volume delta 
+Volume oscillator 
+Volume weighted average price 
+Volume weighted moving average 
+Vortex indicator 
+VWAP auto anchored 
+Williams alligator 
+Williams fractals 
+Woodies CCI 
+Zig Zag 
+Strategies 
+Bar Up Dn strategy 
+Boliinger bonds strategy 
+Bollinger bands strategy directed 
+Channel break out strategy 
+Conservative up/down strategy
+Greedy strategy 
+InSide Bar strategy 
+Keltner channels strategy 
+MACD strategy 
+Momentum strategy 
+Moving Avg 2 line cross 
+Moving Avf cross 
+Outside bar strategy 
+Parabolic SAR strategy 
+Pivot extension strategy
+Price channel strategy 
+Rob booker - ADX breakout 
+RSI strategy 
+Stochastic slow strategy 
+Supertrend strategy 
+Supertrend strategy 
+Technical rating strategy 
+Volty expan close strategy 
+Profiles 
+Time price opportnity 
+Session time price opportunity 
+Auto anchored volume profile 
+Fixed range volume profile 
+Period volume profile 
+Session volume profile 
+Sesion volume profile HD 
+Visible range volume profile 
+Patterns 
+All chart patters 
+Bearish flag chart pattern 
+Bullish flag chart pattern 
+Cup and handle chart pattern 
+Inverted cup and handle chrt pattern 
+Double button chart pattern 
+Double top chart pattern 
+Elliott wave chart pattern 
+Head and shoulders chart pattern 
+Bearish pennant chart pattern 
+Bullish pennant chart pattern 
+Rectangle chart pattern 
+Triage chart pattern 
+Tripe button chart pattern 
+Falling wedge chart pattern 
+Rising webdge chart pattern 
+All candlestick patterns 
+Abandoned baby - bearish 
+Abandoned baby - bullish 
+Dark cloud cover - bears 
+Doji 
+Doji star- bearish 
+Doji star - bullish 
+Downside tasuki gap - bearish 
+Dragonfly doji - bullish 
+Engulfing - bearish 
+Engufing - bullish 
+Vening doji star - bearish 
+Evening star - bearish 
+Falling three methods- bearish 
+Falling window - bearish 
+Gravestone doji - bearish 
+Hammer - bullish 
+Handing man - bearish 
+Harami - bearish 
+Harami - bullish 
+Hamari cross - bearish 
+Harami cross - bullish 
+Inversted hammer - bullish 
+Kicking - bearish 
+Kicking - bullish 
+Long lower shadow - bullish 
+Long upper shadow - bearish 
+Marubozu black - bearish 
+Marubozu white - bullish 
+Morning doji star - bullish 
+Morning star - bullish 
+On neck - bearish 
+Piercing - bullish 
+Rising three methods -biullish 
+Rising window - bullish 
+Shooting star - bearish 
+Spinning top black 
+Spinning top white 
+Three black crows - bearish 
+Three white soldiers - bullish 
+Tri-star bearish 
+Tri-star bullish
+Tweezer bottom - bullish 
+Tweezer top - bearish 
+Upside tasuki gap - bullish 
+
