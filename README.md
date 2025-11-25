@@ -1,71 +1,88 @@
 # Finbot Monorepo
-Finbot is an AI-assisted trading and market-data platform that bundles a real-time backend, ingestion pipelines, dashboard UI, trading engine, AI stacks, and operational tooling inside a single workspace.
+Finbot is an AI-enabled trading research and execution platform that combines real-time APIs, ingestion pipelines, strategy engines, market data tooling, and observability into a single monorepo.
+
+## Features at a Glance
+- **Backend API**: FastAPI server that exposes trading, market data, AI, and payments endpoints.
+- **Market data ingestion**: Historical backfills, websocket streaming, adapters, and telemetry.
+- **Trading engine**: Strategy management, backtesting, live execution, and risk controls.
+- **AI models**: Pipelines, safety tooling, and assistant responses for finance questions.
+- **Data collector scripts**: Standalone helpers for backfills, migrations, and mock ingestion.
+- **Observability + docs**: Docker, compose profiles, Kubernetes helpers, and design docs.
+
+## Module Overview
+- `/backend`: FastAPI app, auth, telemetry, caching, and route handlers for Finbot services.
+- `/frontend`: Vite/Tauri dashboard code (React + Rust host) for trader UI.
+- `/market_data_ingestion`: Ingestion pipelines, adapters, CLI, metrics, and scheduler.
+- `/trading_engine`: Strategy manager, backtester, live trading orchestrator, and helpers.
+- `/ai_models`: Central AI pipeline, safety guard rails, and response models for assistants.
+- `/data_collector`: Reusable market data normalization + standalone CLI scripts for migrations, backfills, and realtime mocking.
+- `/infrastructure`: Dockerfiles, `docker-compose`, deploy scripts, and security tooling.
+- `/docs`: Vision, architecture, module guides, and TODO trackers.
+- `/tests`, `/database`, `/src`: Shared tests, SQL schema, and additional utility scripts.
 
 ## Repository Layout
-
 ```
-/backend                   # FastAPI backend, services, configs, and API surface
-/frontend                  # Vite/Tauri dashboard and UI assets
-/market_data_ingestion     # Historical + realtime ingestion pipeline and adapters
-/trading_engine            # Strategy execution, backtesting, and live trade orchestration
-/ai_models                # AI pipelines, safety, and assistant helpers shared across services
-/data_collector           # Standalone data/ETL scripts plus the normalized market_data package
-/infrastructure           # Dockerfiles, docker-compose, deploy scripts, sensors, CI helpers
-/docs                     # Vision, architecture, README variants, design notes, and TODOs
-/tests                    # Shared unit/integration/performance tests that span services
-/database                 # SQL schema + helpers
-/src                      # CLI entrypoints and shared helpers
+/backend
+/frontend
+/market_data_ingestion
+/trading_engine
+/ai_models
+/data_collector
+/infrastructure
+/docs
+/tests
+/database
+/src
 ```
 
-## Running Resources
+## Tech Stack
+- **Language**: Python 3.11+, Pydantic 2, FastAPI, SQLModel, SQLAlchemy
+- **Data & ML**: pandas, numpy, scikit-learn, ta-lib, AlphalVantage, yfinance
+- **Infra**: Docker, docker-compose, PostgreSQL, Redis, Prometheus, Sentry
+- **Dev tooling**: pytest, black, ruff, mypy, isort, pre-commit
+- **Frontend**: Vite/Tauri (React + Rust)
 
-1. **Backend only**
-   ```sh
-   cd backend
-   pip install -r requirements.txt
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
+## Getting Started (Local)
+```bash
+git clone <repo-url>
+cd blackboxai-finbot
 
-2. **Frontend only**
-   ```sh
-   cd frontend
-   npm install
-   npm run dev
-   ```
-   The UI folder ships the Vite/Tauri configuration for the dashboard.
+# 1. Create a Python virtualenv and install deps
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install -r requirements-dev.txt
 
-3. **Market data ingestion**
-   ```sh
-   pip install -r requirements.txt
-   python -m market_data_ingestion.src.api
-   ```
-   `market_data_ingestion` contains adapters, storage, schedulers, and CLI helpers.
+# 2. Prepare environment variables
+cp .env.example .env
+# edit .env and supply real credentials (DB URLs, API keys, broker secrets)
 
-4. **Trading engine**
-   The reusable trading engine modules live in `trading_engine` and are exercised by the backend and docs samples.
+# 3. Start the backend API
+uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 
-5. **Data collector scripts**
-   ```sh
-   python data_collector/scripts/backfill.py --symbols AAPL MSFT --provider yfinance
-   python data_collector/scripts/realtime.py --symbols AAPL --provider mock
-   python data_collector/scripts/migrate.py
-   ```
+# 4. Run market-data ingestion API
+python -m market_data_ingestion.src.api
 
-6. **AI & models**
-   `ai_models` now houses the AI pipeline plus safety helpers; backend routes import from this package.
+# 5. Start frontend (React/Tauri)
+cd frontend && npm install && npm run dev
+```
+You can also run data collector scripts (backfill, realtime, migrate) via `python data_collector/scripts/<name>.py`.
 
-## Infrastructure & Full Stack
+## Architecture
+Finbot stitches the frontend, backend, ingestion pipeline, trading engine, AI models, and data collector components together in one stack. View the architecture diagram in [`docs/architecture.md`](docs/architecture.md) for the full Mermaid graph and details.
 
-All Docker assets live in `infrastructure/`. To build everything locally:
-
-```sh
+## Running the Full Stack
+```bash
 docker compose -f infrastructure/docker-compose.yml up --build
 ```
+The compose file spins up the backend API, PostgreSQL, and the ingestion profiles (dev, staging, sandbox).
 
-The compose file brings up the backend API, PostgreSQL, and multiple market-data ingestion profiles.
+## Documentation
+- `docs/README_FINBOT.md`: High-level product overview and usage guidance
+- `docs/README_MARKET_DATA.md`: Ingestion deployment notes and operational checklists
+- `docs/trading_engine/`: Strategy and backtesting walkthroughs
+- `docs/architecture.md`: Component interaction diagram
 
-## Documentation & Next Steps
-
-- Reference `docs/README_FINBOT.md` for product overview and `docs/README_MARKET_DATA.md` for ingestion ops.
-- `docs/trading_engine/` contains strategy walkthroughs and API samples.
-- Add new docs inside `docs/` so the monorepo stays cohesive.
+## Future Work
+- Expand AI assistant coverage with more models and knowledge connectors
+- Add a full trading cockpit UI that ties live signals into the frontend
+- Harden the trading engine with deeper risk analytics and backtest replay tools

@@ -6,6 +6,8 @@ Integrates the market_data_ingestion module with the Finbot backend API.
 
 import logging
 from typing import Optional, List
+import os
+
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
@@ -13,8 +15,9 @@ logger = logging.getLogger(__name__)
 
 # Try to import market data ingestion modules
 try:
-    from market_data_ingestion.core.storage import DataStorage
-    from market_data_ingestion.src.metrics import metrics_collector
+from market_data_ingestion.core.storage import DataStorage
+from market_data_ingestion.src.metrics import metrics_collector
+from market_data_ingestion.src.settings import settings as ingestion_settings
     MARKET_DATA_AVAILABLE = True
 except ImportError:
     MARKET_DATA_AVAILABLE = False
@@ -48,18 +51,9 @@ def get_storage() -> Optional[DataStorage]:
     if not MARKET_DATA_AVAILABLE:
         return None
     
-    # Initialize storage from config
-    import os
-    import yaml
-    from pathlib import Path
-    
     try:
-        config_path = Path(__file__).parent.parent.parent / "market_data_ingestion" / "config" / "config.example.yaml"
-        if config_path.exists():
-            with open(config_path, 'r') as f:
-                config = yaml.safe_load(f)
-            db_path = os.getenv('MARKET_DATA_DB_PATH', config.get('database', {}).get('db_path', 'sqlite:///market_data.db'))
-            return DataStorage(db_path)
+        db_path = os.getenv("MARKET_DATA_DB_PATH", ingestion_settings.database_url)
+        return DataStorage(db_path)
     except Exception as e:
         logger.error(f"Error initializing storage: {e}")
     

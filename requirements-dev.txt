@@ -1,0 +1,17 @@
+-r requirements.txt
+
+# Testing
+pytest~=8.3
+pytest-asyncio~=0.21
+pytest-cov~=4.1
+
+# Formatting & linting
+black~=24.3
+ruff~=0.6
+isort~=5.14
+flake8~=6.1
+pre-commit~=3.4
+
+# Typing & tooling
+mypy~=1.12
+ipython~=8.11

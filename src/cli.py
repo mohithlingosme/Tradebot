@@ -1,18 +1,19 @@
 import asyncio
 import argparse
 import logging
-import yaml
 import os
 
 from market_data_ingestion.core.storage import DataStorage
 from market_data_ingestion.adapters.yfinance import YFinanceAdapter
 from market_data_ingestion.adapters.alphavantage import AlphaVantageAdapter
 from market_data_ingestion.adapters.kite_ws import KiteWebSocketAdapter
+from market_data_ingestion.adapters.mock_ws import MockWebSocketServer
 from market_data_ingestion.core.aggregator import TickAggregator
 from market_data_ingestion.core.fetcher_manager import FetcherManager
 from market_data_ingestion.core.scheduler import AutoRefreshScheduler
 from market_data_ingestion.core.tasks.backfill_runner import BackfillRunner, BackfillConfig
 from market_data_ingestion.src.logging_config import setup_logging
+from market_data_ingestion.src.settings import settings
 import tenacity
 
 # Set up logging
@@ -54,13 +55,8 @@ async def realtime(args):
     """
     logging.info(f"Running realtime ingestion with symbols: {args.symbols}, provider: {args.provider}")
 
-    # Load configuration
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'market_data_ingestion', 'config', 'config.example.yaml')
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-
     # Initialize storage
-    storage = DataStorage(config['database']['db_path'])
+    storage = DataStorage(settings.database_url)
     await storage.connect()
     await storage.create_tables()
 
@@ -68,14 +64,21 @@ async def realtime(args):
     aggregator = TickAggregator()
 
     # Choose adapter based on provider
-    if args.provider == "kite_ws":
-        adapter_config = config['providers']['kite_ws']
-        adapter = KiteWebSocketAdapter(adapter_config)
-    elif args.provider == "mock":
-        # For mock, use kite_ws adapter with mock URL
-        adapter_config = config['providers']['kite_ws'].copy()
-        adapter_config['websocket_url'] = "ws://localhost:8765"
-        adapter = KiteWebSocketAdapter(adapter_config)
+    adapter_config = settings.provider_config(args.provider)
+    adapter = None
+
+    if args.provider == "mock":
+        mock_server = MockWebSocketServer()
+        mock_task = asyncio.create_task(mock_server.start())
+        if adapter_config is None:
+            adapter_config = settings.provider_config("mock")
+        if adapter_config is None:
+            logging.error("Mock provider configuration is missing")
+            return
+        adapter = KiteWebSocketAdapter(adapter_config.copy())
+        await asyncio.sleep(2)
+    elif adapter_config:
+        adapter = KiteWebSocketAdapter(adapter_config.copy())
     else:
         logging.error(f"Unsupported provider: {args.provider}")
         return
@@ -119,13 +122,8 @@ async def migrate(args):
     """
     logging.info("Running database migrations")
 
-    # Load configuration
-    config_path = os.path.join(os.path.dirname(__file__), '..', 'market_data_ingestion', 'config', 'config.example.yaml')
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-
     # Initialize storage with database URL
-    db_url = os.getenv('DATABASE_URL', config['database']['db_path'])
+    db_url = os.getenv('DATABASE_URL', settings.database_url)
     storage = DataStorage(db_url)
     await storage.connect()
     await storage.create_tables()

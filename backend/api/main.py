@@ -40,7 +40,7 @@ from .auth import (
     UserCredentials, TokenResponse, authenticate_user,
     create_access_token, get_current_active_user
 )
-from ..config import get_config
+from ..config import settings
 try:
     from ..trading_engine import (
         StrategyManager, AdaptiveRSIMACDStrategy,
@@ -59,7 +59,6 @@ except ImportError:
     get_logger = lambda: None
 
 # Global configuration
-config = get_config()
 APP_START_TIME = datetime.utcnow()
 EXTERNAL_HEALTH_ENDPOINTS = {
     "alphavantage": os.getenv("ALPHAVANTAGE_HEALTH_URL", "https://www.alphavantage.co"),
@@ -178,21 +177,24 @@ trade_stream_manager = TradeStreamManager()
 
 
 def _resolve_database_url() -> Optional[str]:
-    db_cfg = config.get("database", {})
-    if db_cfg.get("url"):
-        return db_cfg["url"]
+    if settings.database_url:
+        return settings.database_url
 
-    user = db_cfg.get("user")
-    password = db_cfg.get("password")
-    host = db_cfg.get("host")
-    port = db_cfg.get("port")
-    name = db_cfg.get("name")
+    if (
+        settings.database_user
+        and settings.database_password
+        and settings.database_host
+        and settings.database_port
+        and settings.database_name
+    ):
+        return (
+            f"postgresql://{settings.database_user}:"
+            f"{settings.database_password}@{settings.database_host}:"
+            f"{settings.database_port}/{settings.database_name}"
+        )
 
-    if user and password and host and port and name:
-        return f"postgresql://{user}:{password}@{host}:{port}/{name}"
-
-    if name:
-        return f"sqlite:///{name}.db"
+    if settings.database_name:
+        return f"sqlite:///{settings.database_name}.db"
 
     return None
 

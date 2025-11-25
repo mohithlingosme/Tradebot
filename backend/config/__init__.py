@@ -1,142 +1,96 @@
-"""
-Configuration module for Finbot Backend.
+from __future__ import annotations
 
-Provides environment-specific configuration management.
-"""
+from typing import Any, Dict
 
-import os
-from typing import Dict, Any
-from pathlib import Path
+from .settings import settings
 
-def load_config(env: str = None) -> Dict[str, Any]:
+__all__ = ["load_config", "get_config", "settings"]
+
+_config: Dict[str, Any] | None = None
+
+
+def load_config(env: str | None = None) -> Dict[str, Any]:
     """
-    Load configuration based on environment.
-
-    Args:
-        env: Environment name (development, staging, production)
-
-    Returns:
-        Configuration dictionary
+    Build a configuration dictionary for legacy consumers while keeping
+    the BaseSettings-backed `settings` instance as the primary source of
+    truth.
     """
-    if env is None:
-        env = os.getenv("APP_ENV", "development")
-
-    # Base configuration
-    config = {
-        "app": {
-            "env": env,
-            "port": int(os.getenv("APP_PORT", "8000")),
-            "host": os.getenv("APP_HOST", "0.0.0.0"),
-            "cors_origins": os.getenv("CORS_ORIGINS", "http://localhost:8501").split(",")
-        },
-        "database": {
-            "url": os.getenv("DATABASE_URL"),
-            "host": os.getenv("DATABASE_HOST", "localhost"),
-            "port": int(os.getenv("DATABASE_PORT", "5432")),
-            "name": os.getenv("DATABASE_NAME", "finbot_db"),
-            "user": os.getenv("DATABASE_USER", "finbot_user"),
-            "password": os.getenv("DATABASE_PASSWORD")
-        },
-        "redis": {
-            "url": os.getenv("REDIS_URL", "redis://localhost:6379"),
-            "host": os.getenv("REDIS_HOST", "localhost"),
-            "port": int(os.getenv("REDIS_PORT", "6379")),
-            "password": os.getenv("REDIS_PASSWORD")
-        },
-        "auth": {
-            "jwt_secret_key": os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production"),
-            "jwt_algorithm": "HS256",
-            "access_token_expire_minutes": 30
-        },
-        "trading": {
-            "mode": os.getenv("TRADING_MODE", "simulation"),
-            "update_interval_seconds": float(os.getenv("UPDATE_INTERVAL_SECONDS", "5.0")),
-            "default_symbols": os.getenv("DEFAULT_SYMBOLS", "AAPL,GOOGL,MSFT").split(",")
-        },
-        "risk": {
-            "max_drawdown": float(os.getenv("MAX_DRAWDOWN", "0.15")),
-            "max_daily_loss": float(os.getenv("MAX_DAILY_LOSS", "0.05")),
-            "max_position_size": float(os.getenv("MAX_POSITION_SIZE", "0.10")),
-            "initial_cash": float(os.getenv("INITIAL_CASH", "100000"))
-        },
-        "logging": {
-            "level": os.getenv("LOG_LEVEL", "INFO"),
-            "file": os.getenv("LOG_FILE", "logs/finbot.log"),
-            "max_size": int(os.getenv("LOG_MAX_SIZE", "10485760")),
-            "backup_count": int(os.getenv("LOG_BACKUP_COUNT", "5"))
-        },
-        "monitoring": {
-            "health_check_interval": int(os.getenv("HEALTH_CHECK_INTERVAL", "30")),
-            "metrics_retention_days": int(os.getenv("METRICS_RETENTION_DAYS", "30")),
-            "enable_prometheus": os.getenv("ENABLE_PROMETHEUS_METRICS", "false").lower() == "true",
-            "prometheus_port": int(os.getenv("PROMETHEUS_PORT", "9090"))
-        },
-        "news": {
-            "database_url": os.getenv("NEWS_DATABASE_URL", os.getenv("DATABASE_URL", "sqlite:///news.db")),
-            "enable_ai": os.getenv("NEWS_ENABLE_AI", "true").lower() == "true",
-            "max_articles": int(os.getenv("NEWS_MAX_ARTICLES", "25")),
-            "sources": [
-                {
-                    "name": "WSJ Markets",
-                    "type": "rss",
-                    "url": os.getenv("NEWS_SOURCE_WSJ", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
-                    "symbols": ["AAPL", "MSFT", "NVDA"]
-                },
-                {
-                    "name": "Finviz",
-                    "type": "rss",
-                    "url": os.getenv("NEWS_SOURCE_FINVIZ", "https://finviz.com/feed.ashx"),
-                    "symbols": ["SPY", "QQQ"]
-                }
-            ],
-            "scheduler": {
-                "enabled": os.getenv("NEWS_SCHEDULER_ENABLED", "true").lower() == "true",
-                "run_time": os.getenv("NEWS_SCHEDULER_RUN_TIME", "06:00"),
-                "timezone": os.getenv("NEWS_SCHEDULER_TIMEZONE", "UTC")
-            }
-        }
+    active_env = env or settings.app_env
+    database_info = {
+        "url": settings.database_url,
+        "host": settings.database_host,
+        "port": settings.database_port,
+        "name": settings.database_name,
+        "user": settings.database_user,
+        "password": settings.database_password,
     }
 
-    # Environment-specific overrides
-    if env == "staging":
-        config.update(_load_staging_config())
-    elif env == "production":
-        config.update(_load_production_config())
+    if not database_info["url"]:
+        database_info["url"] = f"sqlite:///{settings.database_name}.db"
+
+    news_db_url = settings.news_database_url or settings.database_url or f"sqlite:///{settings.database_name}_news.db"
+
+    config: Dict[str, Any] = {
+        "app": {
+            "env": active_env,
+            "port": settings.app_port,
+            "host": settings.app_host,
+            "cors_origins": list(settings.allow_origins),
+            "name": settings.app_name,
+            "version": settings.app_version,
+        },
+        "database": database_info,
+        "redis": {
+            "url": settings.redis_url,
+        },
+        "auth": {
+            "jwt_secret_key": settings.jwt_secret_key,
+            "jwt_algorithm": settings.jwt_algorithm,
+            "access_token_expire_minutes": 30,
+        },
+        "trading": {
+            "mode": settings.trading_mode,
+            "update_interval_seconds": settings.update_interval_seconds,
+            "default_symbols": list(
+                settings.default_symbols
+            ),
+        },
+        "risk": {
+            "max_drawdown": settings.max_drawdown,
+            "max_daily_loss": settings.max_daily_loss,
+            "max_position_size": settings.max_position_size,
+            "initial_cash": settings.initial_cash,
+        },
+        "logging": {
+            "level": settings.log_level,
+            "file": settings.log_file,
+            "max_size": settings.log_max_size,
+            "backup_count": settings.log_backup_count,
+        },
+        "monitoring": {
+            "health_check_interval": settings.health_check_interval,
+            "metrics_retention_days": settings.metrics_retention_days,
+            "enable_prometheus": settings.enable_prometheus_metrics,
+            "prometheus_port": settings.prometheus_port,
+        },
+        "news": {
+            "database_url": news_db_url,
+            "enable_ai": settings.news_enable_ai,
+            "max_articles": settings.news_max_articles,
+            "sources": settings.news_sources,
+            "scheduler": {
+                "enabled": settings.news_scheduler_enabled,
+                "run_time": settings.news_scheduler_run_time,
+                "timezone": settings.news_scheduler_timezone,
+            },
+        },
+    }
 
     return config
 
-def _load_staging_config() -> Dict[str, Any]:
-    """Load staging-specific configuration."""
-    return {
-        "app": {
-            "debug": False,
-            "cors_origins": ["https://staging.finbot.yourcompany.com"]
-        },
-        "logging": {
-            "level": "WARNING"
-        }
-    }
-
-def _load_production_config() -> Dict[str, Any]:
-    """Load production-specific configuration."""
-    return {
-        "app": {
-            "debug": False,
-            "cors_origins": ["https://finbot.yourcompany.com"]
-        },
-        "logging": {
-            "level": "ERROR"
-        },
-        "monitoring": {
-            "enable_prometheus": True
-        }
-    }
-
-# Global config instance
-_config = None
 
 def get_config() -> Dict[str, Any]:
-    """Get the global configuration instance."""
+    """Return the cached configuration dictionary for legacy consumers."""
     global _config
     if _config is None:
         _config = load_config()

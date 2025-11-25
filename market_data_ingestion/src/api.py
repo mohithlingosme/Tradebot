@@ -1,11 +1,10 @@
 from fastapi import FastAPI, HTTPException, Query, Response
 from typing import List, Optional
 import uvicorn
-import yaml
-import os
 from market_data_ingestion.core.storage import DataStorage
 from market_data_ingestion.src.logging_config import setup_logging, get_logger
 from market_data_ingestion.src.metrics import metrics_collector
+from market_data_ingestion.src.settings import settings
 
 # Set up logging
 setup_logging()
@@ -13,13 +12,8 @@ logger = get_logger(__name__)
 
 app = FastAPI(title="Market Data API", version="1.0.0")
 
-# Load configuration
-config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.example.yaml')
-with open(config_path, 'r') as f:
-    config = yaml.safe_load(f)
-
 # Initialize storage
-storage = DataStorage(config['database']['db_path'])
+storage = DataStorage(settings.database_url)
 
 @app.on_event("startup")
 async def startup_event():

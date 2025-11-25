@@ -11,6 +11,7 @@ from .database import create_db_and_tables
 from .routes import router
 from .routes_ai import router as ai_router
 from .payments.routes import router as payments_router
+from .routers import health, portfolio, positions, strategy, system, trades
 from .sim import simulator
 from .telemetry import RequestTimingMiddleware, configure_sentry
 from .security.middleware import EnforceHTTPSMiddleware, SecurityHeadersMiddleware
@@ -20,6 +21,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.app_name, version="1.1.0")
+# Run with: uvicorn backend.app.main:app --reload
 
 configure_sentry()
 
@@ -39,6 +41,14 @@ app.add_middleware(
 app.include_router(router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 app.include_router(payments_router, prefix="/api")
+
+# New layered routers
+app.include_router(health.router)
+app.include_router(system.router)
+app.include_router(portfolio.router)
+app.include_router(positions.router)
+app.include_router(trades.router)
+app.include_router(strategy.router)
 
 # In-memory storage for demo purposes
 # In production, use a proper database
