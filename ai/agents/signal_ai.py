@@ -48,8 +48,8 @@ class SignalAI:
             "You are Signal AI. Provide a structured directional view only.\n"
             "Do NOT provide orders, sizes, leverage, or broker instructions.\n"
             "Return JSON matching this schema exactly:\n"
-            '{\"view\": \"long|short|neutral\", \"confidence\": 0-1, \"horizon\": \"intraday|swing\",'
-            ' \"stop_loss_hint\": \"text\", \"target_hint\": \"text\", \"reasoning\": \"text\"}\n"
+            '{"view": "long|short|neutral", "confidence": 0-1, "horizon": "intraday|swing", '
+            '"stop_loss_hint": "text", "target_hint": "text", "reasoning": "text"}\n'
             f"Symbol: {symbol}\n"
             f"Horizon: {horizon}\n"
             f"Research summary: {research_summary or 'n/a'}\n"
@@ -92,4 +92,3 @@ class SignalAI:
         except Exception as exc:
             meta["reason"] = f"Failed to parse LLMSignal: {exc}"
             return {"signal": self._default_signal(horizon, "parse_error"), "meta": meta}
-

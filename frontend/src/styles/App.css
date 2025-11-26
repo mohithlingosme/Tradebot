@@ -33,6 +33,16 @@
   transition: background-color 0.3s;
 }
 
+.logout-button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.nav-link.active {
+  background-color: #2563eb;
+}
+
 .nav-link:hover {
   background-color: #61dafb;
   color: #282c34;

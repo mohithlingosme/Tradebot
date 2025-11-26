@@ -4,12 +4,10 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 
 const App = lazy(() => import('./App'))
-const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Watchlist = lazy(() => import('./pages/Watchlist'))
-const Settings = lazy(() => import('./pages/Settings'))
-const NewsFeed = lazy(() => import('./pages/NewsFeed'))
-const AIAssistant = lazy(() => import('./pages/AIAssistant'))
-const PaperTrading = lazy(() => import('./pages/PaperTrading'))
+const Home = lazy(() => import('./pages/Home'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Positions = lazy(() => import('./pages/Positions'))
+const Logs = lazy(() => import('./pages/Logs'))
 const Login = lazy(() => import('./pages/Login'))
 const Register = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
@@ -34,47 +32,31 @@ const router = createBrowserRouter([
         index: true,
         element: (
           <ProtectedRoute>
-            {lazyLoad(Dashboard)}
+            {lazyLoad(Home)}
           </ProtectedRoute>
         ),
       },
       {
-        path: 'watchlist',
+        path: 'orders',
         element: (
           <ProtectedRoute>
-            {lazyLoad(Watchlist)}
+            {lazyLoad(Orders)}
           </ProtectedRoute>
         ),
       },
       {
-        path: 'settings',
+        path: 'positions',
         element: (
           <ProtectedRoute>
-            {lazyLoad(Settings)}
+            {lazyLoad(Positions)}
           </ProtectedRoute>
         ),
       },
       {
-        path: 'news',
+        path: 'logs',
         element: (
           <ProtectedRoute>
-            {lazyLoad(NewsFeed)}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'ai-assistant',
-        element: (
-          <ProtectedRoute>
-            {lazyLoad(AIAssistant)}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'paper-trading',
-        element: (
-          <ProtectedRoute>
-            {lazyLoad(PaperTrading)}
+            {lazyLoad(Logs)}
           </ProtectedRoute>
         ),
       },

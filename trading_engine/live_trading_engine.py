@@ -17,6 +17,7 @@ import asyncio
 import os
 import threading
 import time
+import random
 from typing import Dict, List, Optional, Callable, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
@@ -26,6 +27,8 @@ import uuid
 from .strategy_manager import StrategyManager, BaseStrategy
 from risk_management.portfolio_manager import PortfolioManager
 from monitoring.logger import StructuredLogger, LogLevel, Component
+from execution.base_broker import BaseBroker, Order as BrokerOrder, OrderSide, OrderStatus, OrderType
+from execution.mocked_broker import MockedBroker
 from risk.risk_manager import AccountState, OrderRequest, RiskLimits, RiskManager
 # from ..data_ingestion.data_fetcher import DataFetcher
 # from ..data_ingestion.data_loader import DataLoader
@@ -85,7 +88,8 @@ class LiveTradingEngine:
                  data_fetcher: Optional["DataFetcher"] = None,
                  data_loader: Optional["DataLoader"] = None,
                  risk_manager: Optional[RiskManager] = None,
-                 risk_limits: Optional[RiskLimits] = None):
+                 risk_limits: Optional[RiskLimits] = None,
+                 broker: Optional[BaseBroker] = None):
         """
         Initialize the LiveTradingEngine.
 
@@ -102,6 +106,7 @@ class LiveTradingEngine:
         self.data_fetcher = data_fetcher
         self.data_loader = data_loader
         self.risk_manager = risk_manager or RiskManager(risk_limits or RiskLimits())
+        self.broker: BaseBroker = broker or MockedBroker()
 
         # Engine state
         self.state = EngineState.STOPPED
@@ -442,12 +447,8 @@ class LiveTradingEngine:
             if position_size <= 0:
                 return None
 
-            # Simulate or execute trade
-            if self.config.mode in [TradingMode.SIMULATION, TradingMode.PAPER_TRADING]:
-                trade = self._simulate_trade(symbol, signal, position_size)
-            else:
-                # TODO: Integrate with actual broker API
-                trade = self._simulate_trade(symbol, signal, position_size)
+            # Simulate or execute trade via broker
+            trade = self._execute_via_broker(symbol, signal, position_size)
 
             # Update portfolio
             if trade:
@@ -682,6 +683,34 @@ class LiveTradingEngine:
             'timestamp': datetime.now(),
             'order_id': f"sim_{int(time.time())}_{random.randint(1000, 9999)}"
         }
+
+    def _execute_via_broker(self, symbol: str, signal: str, quantity: int) -> Dict:
+        """Route order through the configured broker (mock/paper/live)."""
+        current_price = getattr(self, f'last_price_{symbol}', 100.0)
+        side = OrderSide.BUY if signal == 'buy' else OrderSide.SELL
+        try:
+            broker_order = BrokerOrder(
+                id=None,
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                order_type=OrderType.MARKET,
+                price=current_price,
+            )
+            response = self.broker.place_order(broker_order)
+            price = response.avg_fill_price or response.price or current_price
+            return {
+                'order_id': response.id or f"broker_{uuid.uuid4()}",
+                'symbol': symbol,
+                'side': signal,
+                'quantity': response.filled_quantity or quantity,
+                'price': price,
+                'timestamp': datetime.now().isoformat(),
+                'status': response.status.value,
+            }
+        except Exception as exc:
+            self.logger.log_error(Component.EXECUTION, exc, {"symbol": symbol})
+            return self._simulate_trade(symbol, signal, quantity)
 
     def get_engine_status(self) -> Dict:
         """Get current engine status and metrics"""

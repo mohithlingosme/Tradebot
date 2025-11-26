@@ -1,0 +1,38 @@
+.summary-card {
+  background: #0f172a;
+  color: #e2e8f0;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.summary-card .summary-title {
+  font-size: 0.9rem;
+  color: #94a3b8;
+  margin-bottom: 6px;
+  letter-spacing: 0.02em;
+}
+
+.summary-card .summary-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.summary-card .summary-subtitle {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  margin-top: 6px;
+}
+
+.summary-card.positive .summary-value {
+  color: #34d399;
+}
+
+.summary-card.negative .summary-value {
+  color: #f87171;
+}
+
+.summary-card.muted .summary-value {
+  color: #94a3b8;
+}

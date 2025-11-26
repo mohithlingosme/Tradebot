@@ -11,23 +11,17 @@ function App() {
         <header className="app-header">
           <h1>Finbot</h1>
           <nav className="app-nav">
-            <NavLink to="/" end className="nav-link">
-              Dashboard
+            <NavLink to="/" end className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+              Home
             </NavLink>
-            <NavLink to="/watchlist" className="nav-link">
-              Watchlist
+            <NavLink to="/orders" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+              Orders
             </NavLink>
-            <NavLink to="/news" className="nav-link">
-              News
+            <NavLink to="/positions" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+              Positions
             </NavLink>
-            <NavLink to="/ai-assistant" className="nav-link">
-              AI Assistant
-            </NavLink>
-            <NavLink to="/paper-trading" className="nav-link">
-              Paper Trading
-            </NavLink>
-            <NavLink to="/settings" className="nav-link">
-              Settings
+            <NavLink to="/logs" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>
+              Logs
             </NavLink>
             <button onClick={logout} className="nav-link logout-button">
               Logout
@@ -38,11 +32,7 @@ function App() {
       <main className="app-main">
         <Outlet />
       </main>
-      {isAuthenticated && (
-        <footer className="app-footer">
-          <p>&copy; 2024 Finbot Market Data App</p>
-        </footer>
-      )}
+      {isAuthenticated && <footer className="app-footer" />}
     </div>
   )
 }

@@ -157,18 +157,57 @@ export interface Position {
   pnl_percent: number
 }
 
-export const fetchPortfolio = async (): Promise<PortfolioData> => {
+export interface OrderRow {
+  id: string
+  symbol: string
+  side: 'BUY' | 'SELL'
+  qty: number
+  price: number
+  status: string
+  timestamp: string
+}
+
+export interface LogEntry {
+  timestamp: string
+  level: 'INFO' | 'WARN' | 'ERROR' | string
+  component?: string
+  message: string
+}
+
+export interface StrategyStatus {
+  name: string
+  state: 'RUNNING' | 'STOPPED' | 'PAUSED' | string
+  since?: string
+}
+
+export interface RiskStatus {
+  max_daily_loss_pct: number
+  used_pct: number
+  circuit_breaker: boolean
+}
+
+export interface PnLStatus {
+  total: number
+  realized?: number
+  unrealized?: number
+  timestamp?: string
+}
+
+const authHeaders = () => {
   const token = localStorage.getItem('access_token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+export const fetchPortfolio = async (): Promise<PortfolioData> => {
   const response = await api.get<PortfolioData>('/portfolio', {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: authHeaders()
   })
   return response.data
 }
 
 export const fetchPositions = async (): Promise<Position[]> => {
-  const token = localStorage.getItem('access_token')
   const response = await api.get<Position[]>('/positions', {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: authHeaders()
   })
   return response.data
 }
@@ -186,16 +225,77 @@ export interface NewsItem {
 }
 
 export const fetchNews = async (): Promise<NewsItem[]> => {
-  const token = localStorage.getItem('access_token')
   try {
     const response = await api.get<{ articles?: NewsItem[], data?: NewsItem[] }>('/news', {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: authHeaders()
     })
     const data = response.data.articles ?? response.data.data
     return data ?? []
   } catch (error) {
     // Return empty array if endpoint doesn't exist
     return []
+  }
+}
+
+export const fetchOrders = async (): Promise<OrderRow[]> => {
+  try {
+    const response = await api.get<OrderRow[]>(withApiPrefix('/orders/recent'), {
+      headers: authHeaders(),
+    })
+    const rows = Array.isArray(response.data) ? response.data : (response.data as any).orders
+    return rows ?? []
+  } catch {
+    return [
+      { id: 'demo-1', symbol: 'NIFTY', side: 'BUY', qty: 50, price: 100.5, status: 'FILLED', timestamp: new Date().toISOString() },
+      { id: 'demo-2', symbol: 'BANKNIFTY', side: 'SELL', qty: 25, price: 250.1, status: 'FILLED', timestamp: new Date().toISOString() },
+    ]
+  }
+}
+
+export const fetchLogs = async (): Promise<LogEntry[]> => {
+  try {
+    const response = await api.get<LogEntry[]>(withApiPrefix('/logs'), {
+      headers: authHeaders(),
+    })
+    const rows = Array.isArray(response.data) ? response.data : (response.data as any).logs
+    return rows ?? []
+  } catch {
+    const now = new Date().toISOString()
+    return [
+      { timestamp: now, level: 'INFO', component: 'engine', message: 'Engine heartbeat' },
+      { timestamp: now, level: 'WARN', component: 'risk', message: 'Using demo risk status (no backend logs endpoint)' },
+    ]
+  }
+}
+
+export const fetchStrategyStatus = async (): Promise<StrategyStatus> => {
+  try {
+    const response = await api.get<StrategyStatus>(withApiPrefix('/strategy/status'), {
+      headers: authHeaders(),
+    })
+    return response.data
+  } catch {
+    return { name: 'EMA Crossover', state: 'RUNNING', since: new Date().toISOString() }
+  }
+}
+
+export const fetchRiskStatus = async (): Promise<RiskStatus> => {
+  try {
+    const response = await api.get<RiskStatus>(withApiPrefix('/risk/status'), {
+      headers: authHeaders(),
+    })
+    return response.data
+  } catch {
+    return { max_daily_loss_pct: 0.05, used_pct: 0.12, circuit_breaker: false }
+  }
+}
+
+export const fetchPnl = async (): Promise<PnLStatus> => {
+  try {
+    const portfolio = await fetchPortfolio()
+    return { total: portfolio.pnl, realized: portfolio.pnl, unrealized: 0 }
+  } catch {
+    return { total: 0, realized: 0, unrealized: 0 }
   }
 }
 

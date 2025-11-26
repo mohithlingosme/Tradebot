@@ -18,25 +18,9 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from enum import Enum
 
+from execution.base_broker import BaseBroker, Order as BrokerOrder, OrderSide, OrderStatus, OrderType
+
 logger = logging.getLogger(__name__)
-
-class OrderType(Enum):
-    MARKET = "market"
-    LIMIT = "limit"
-    STOP = "stop"
-    STOP_LIMIT = "stop_limit"
-
-class OrderSide(Enum):
-    BUY = "buy"
-    SELL = "sell"
-
-class OrderStatus(Enum):
-    PENDING = "pending"
-    SUBMITTED = "submitted"
-    FILLED = "filled"
-    PARTIAL = "partial"
-    CANCELLED = "cancelled"
-    REJECTED = "rejected"
 
 class Order:
     """
@@ -65,7 +49,7 @@ class Order:
         self.order_type = order_type
         self.price = price
         self.stop_price = stop_price
-        self.status = OrderStatus.PENDING
+        self.status = OrderStatus.NEW
         self.timestamp = datetime.now()
         self.filled_quantity = 0
         self.average_price = 0.0
@@ -121,7 +105,7 @@ class OrderManager:
             Created Order object
         """
         order_id = f"order_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{symbol}"
-        side = OrderSide.BUY if signal.get('action') == 'buy' else OrderSide.SELL
+        side = OrderSide.BUY if str(signal.get('action')).lower() == 'buy' else OrderSide.SELL
 
         order = Order(order_id, symbol, side, quantity, order_type, price, stop_price)
         self.orders[order_id] = order
@@ -140,14 +124,25 @@ class OrderManager:
             True if submitted successfully, False otherwise
         """
         try:
-            # TODO: Implement broker order submission
-            # - Call broker API
-            # - Handle submission response
-            # - Update order status
-
-            order.status = OrderStatus.SUBMITTED
-            self.logger.info(f"Submitted order: {order.order_id}")
-            return True
+            broker_order = BrokerOrder(
+                id=order.order_id,
+                symbol=order.symbol,
+                side=order.side,
+                quantity=order.quantity,
+                order_type=order.order_type,
+                price=order.price,
+            )
+            broker_response = self.broker.place_order(broker_order) if isinstance(self.broker, BaseBroker) else None
+            if broker_response:
+                order.status = broker_response.status
+                order.filled_quantity = broker_response.filled_quantity
+                order.average_price = broker_response.avg_fill_price or order.price or 0.0
+            else:
+                order.status = OrderStatus.FILLED
+                order.filled_quantity = order.quantity
+                order.average_price = order.price or 0.0
+            self.logger.info(f"Submitted order: {order.order_id} with status {order.status.value}")
+            return order.status not in {OrderStatus.REJECTED, OrderStatus.CANCELLED}
         except Exception as e:
             self.logger.error(f"Failed to submit order {order.order_id}: {e}")
             order.status = OrderStatus.REJECTED
@@ -168,15 +163,15 @@ class OrderManager:
             return False
 
         order = self.orders[order_id]
-        if order.status not in [OrderStatus.PENDING, OrderStatus.SUBMITTED]:
+        if order.status in [OrderStatus.FILLED, OrderStatus.CANCELLED, OrderStatus.REJECTED]:
             self.logger.error(f"Cannot cancel order {order_id} with status {order.status.value}")
             return False
 
         try:
-            # TODO: Implement broker order cancellation
-            # - Call broker cancel API
-            # - Update order status
-
+            if isinstance(self.broker, BaseBroker):
+                if not self.broker.cancel_order(order_id):
+                    self.logger.error(f"Broker failed to cancel order {order_id}")
+                    return False
             order.status = OrderStatus.CANCELLED
             self.logger.info(f"Cancelled order: {order_id}")
             return True
