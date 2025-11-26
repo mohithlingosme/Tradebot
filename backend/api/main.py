@@ -93,6 +93,50 @@ except ImportError:
     news_router = None
     logger.warning("News router not available")
 
+
+def _determine_engine_mode() -> Optional["TradingMode"]:
+    """
+    Map FINBOT_MODE into a trading engine mode while enforcing the live
+    confirmation guard.
+    """
+    if not TradingMode:
+        return None
+
+    if settings.finbot_mode == "live":
+        if not settings.live_trading_confirm:
+            logger.warning(
+                "FINBOT_MODE=live without FINBOT_LIVE_TRADING_CONFIRM; "
+                "downgrading to paper trading mode"
+            )
+            return TradingMode.PAPER_TRADING
+        return TradingMode.LIVE
+
+    if settings.finbot_mode == "paper":
+        return TradingMode.PAPER_TRADING
+
+    return TradingMode.SIMULATION
+
+
+def ensure_live_trading_allowed(operation: str) -> None:
+    """
+    Guard any live broker calls behind explicit mode + confirmation flags.
+    """
+    if settings.finbot_mode != "live":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Live trading is disabled while FINBOT_MODE={settings.finbot_mode}. "
+            "Switch to FINBOT_MODE=live to enable broker operations.",
+        )
+
+    if not settings.live_trading_confirm:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"{operation} blocked: set FINBOT_LIVE_TRADING_CONFIRM=true to unlock "
+                "live broker calls."
+            ),
+        )
+
 app = FastAPI(
     title="Finbot Trading API",
     description="API for Finbot autonomous trading system",
@@ -142,8 +186,9 @@ portfolio_manager = PortfolioManager({
 logger_service = get_logger()
 
 # Live trading engine
+engine_mode = _determine_engine_mode() if LiveTradingConfig else None
 live_engine_config = LiveTradingConfig(
-    mode=TradingMode.SIMULATION,
+    mode=engine_mode or (TradingMode.SIMULATION if TradingMode else None),
     symbols=["AAPL"],
     update_interval_seconds=5.0
 ) if LiveTradingConfig else None
@@ -864,6 +909,18 @@ async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_curr
         if trade.quantity <= 0:
             raise HTTPException(status_code=400, detail="Invalid quantity")
 
+        execution_mode = settings.finbot_mode
+        live_execution = False
+
+        if settings.finbot_mode == "live":
+            ensure_live_trading_allowed("Placing live trade orders")
+            live_execution = True
+        else:
+            logger.warning(
+                "Live broker calls are disabled in FINBOT_MODE=%s; using simulated execution",
+                settings.finbot_mode,
+            )
+
         # TODO: Implement actual trade execution through broker integration
         # For now, simulate trade execution
         trade_result = {
@@ -873,7 +930,9 @@ async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_curr
             "quantity": trade.quantity,
             "price": trade.price or 100.0,  # Mock price
             "timestamp": datetime.now().isoformat(),
-            "status": "executed"
+            "status": "executed",
+            "execution_mode": execution_mode,
+            "live_execution": live_execution,
         }
 
         logger.info(f"Trade executed: {trade_result}")

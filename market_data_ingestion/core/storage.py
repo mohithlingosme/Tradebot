@@ -1,11 +1,13 @@
 import asyncio
+import json
 import logging
 import os
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiosqlite
 import asyncpg
+import tenacity
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -91,6 +93,32 @@ class DataStorage:
                     )
                     """
                 )
+                await self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ticks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol VARCHAR(40) NOT NULL,
+                        ts_utc DATETIME NOT NULL,
+                        price REAL NOT NULL,
+                        volume REAL NOT NULL,
+                        provider VARCHAR(50) NOT NULL,
+                        raw_json TEXT,
+                        UNIQUE(symbol, ts_utc, provider)
+                    )
+                    """
+                )
+                await self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS dlq_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        provider VARCHAR(50) NOT NULL,
+                        symbol VARCHAR(40),
+                        error TEXT,
+                        payload TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
                 await self.conn.commit()
             elif self.db_type == 'postgresql':
                 await self.conn.execute(
@@ -106,6 +134,32 @@ class DataStorage:
                         volume REAL NOT NULL,
                         provider VARCHAR(50) NOT NULL,
                         UNIQUE(symbol, ts_utc, provider)
+                    )
+                    """
+                )
+                await self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS ticks (
+                        id SERIAL PRIMARY KEY,
+                        symbol VARCHAR(40) NOT NULL,
+                        ts_utc TIMESTAMPTZ NOT NULL,
+                        price REAL NOT NULL,
+                        volume REAL NOT NULL,
+                        provider VARCHAR(50) NOT NULL,
+                        raw_json JSONB,
+                        UNIQUE(symbol, ts_utc, provider)
+                    )
+                    """
+                )
+                await self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS dlq_events (
+                        id SERIAL PRIMARY KEY,
+                        provider VARCHAR(50) NOT NULL,
+                        symbol VARCHAR(40),
+                        error TEXT,
+                        payload JSONB,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                     """
                 )
@@ -140,6 +194,68 @@ class DataStorage:
             logger.debug(f"Inserted candle: {candle}")
         except Exception as e:
             logger.error(f"Error inserting candle into {self.db_type} database: {e}")
+            raise
+
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=8),
+        reraise=True,
+    )
+    async def insert_tick(self, tick: Dict[str, Any]):
+        """Insert a normalized tick with retries for transient failures."""
+        try:
+            if self.db_type == 'sqlite':
+                await self.conn.execute(
+                    """
+                    INSERT OR IGNORE INTO ticks (symbol, ts_utc, price, volume, provider, raw_json)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (tick["symbol"], tick["ts_utc"], tick["price"], tick["volume"], tick["provider"], json.dumps(tick.get("raw", {}))),
+                )
+                await self.conn.commit()
+            else:
+                await self.conn.execute(
+                    """
+                    INSERT INTO ticks (symbol, ts_utc, price, volume, provider, raw_json)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (symbol, ts_utc, provider) DO NOTHING
+                    """,
+                    tick["symbol"],
+                    tick["ts_utc"],
+                    tick["price"],
+                    tick["volume"],
+                    tick["provider"],
+                    json.dumps(tick.get("raw", {})),
+                )
+        except Exception as exc:
+            logger.error(f"Error inserting tick: {exc}")
+            raise
+
+    async def insert_dlq(self, provider: str, symbol: Optional[str], error: str, payload: Dict[str, Any]):
+        """Persist a DLQ record."""
+        try:
+            if self.db_type == 'sqlite':
+                await self.conn.execute(
+                    """
+                    INSERT INTO dlq_events (provider, symbol, error, payload)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (provider, symbol, error, json.dumps(payload)),
+                )
+                await self.conn.commit()
+            else:
+                await self.conn.execute(
+                    """
+                    INSERT INTO dlq_events (provider, symbol, error, payload)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    provider,
+                    symbol,
+                    error,
+                    json.dumps(payload),
+                )
+        except Exception as exc:
+            logger.error(f"Error inserting DLQ event: {exc}")
             raise
 
     async def fetch_last_n_candles(self, symbol: str, interval: str, limit: int = 50) -> List[Dict[str, Any]]:

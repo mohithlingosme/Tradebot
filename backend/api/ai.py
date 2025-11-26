@@ -64,7 +64,7 @@ async def analyze_market(
     current_user: Dict = Depends(get_current_active_user)
 ):
     """
-    Analyze market data and provide trading signal.
+    Analyze market data and provide an advisory-only trading signal.
 
     Args:
         request: Market analysis request
@@ -134,7 +134,7 @@ async def trading_assistant(
     request: TradingAssistantRequest,
     current_user: Dict = Depends(get_current_active_user)
 ):
-    """Provide AI-based trading plan."""
+    """Provide AI-based trading plan (advisory only; never auto-executes)."""
     try:
         payload = ai_pipeline.generate_trading_plan(
             request.symbol, request.risk_profile, request.account_size

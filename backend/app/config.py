@@ -1,14 +1,22 @@
 """Centralized application configuration for the backend service."""
 
-from functools import lru_cache
 import secrets
+from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    """Runtime configuration pulled from environment variables."""
+    """Runtime configuration pulled from environment variables.
+
+    Modes: dev = safe sandbox/mock data; paper = broker sandbox/paper trading;
+    live = real brokers and requires FINBOT_LIVE_TRADING_CONFIRM=true.
+    """
+
+    finbot_mode: Literal["dev", "paper", "live"] = Field("dev", env="FINBOT_MODE")
+    live_trading_confirm: bool = Field(False, env="FINBOT_LIVE_TRADING_CONFIRM")
 
     app_name: str = "Finbot Backend"
     environment: str = "development"

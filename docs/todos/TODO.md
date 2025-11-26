@@ -49,29 +49,29 @@ A unified roadmap for building a fully automated, broker-independent, intelligen
 ## 📌 PHASE 2 – Market Data Ingestion System
 
 ### 🟦 2.1 Adapters
-- [ ] Finish kite_ws adapter
-- [ ] Add: Fyers, AlphaVantage, Yahoo, Binance, Polygon
-- [ ] Add rate limiting, retries (tenacity)
+- [x] Finish kite_ws adapter
+- [x] Add: Fyers, AlphaVantage, Yahoo, Binance, Polygon
+- [x] Add rate limiting, retries (tenacity)
 
 ### 🟦 2.2 Realtime Pipeline
-- [ ] Stream ingestion with error recovery
-- [ ] Dead-letter queue support
-- [ ] Connection auto-recovery + monitoring
+- [x] Stream ingestion with error recovery
+- [x] Dead-letter queue support
+- [x] Connection auto-recovery + monitoring
 
 ### 🟦 2.3 Backfill Pipeline
-- [ ] Async CSV/API ingestion
-- [ ] Data quality validation
-- [ ] Merge to historical table
+- [x] Async CSV/API ingestion
+- [x] Data quality validation
+- [x] Merge to historical table
 
 ### 🟦 2.4 Storage Layer
-- [ ] PostgreSQL schema migration
-- [ ] Add pooling, health checks
-- [ ] Retry layer with logging
+- [x] PostgreSQL schema migration
+- [x] Add pooling, health checks
+- [x] Retry layer with logging
 
 ### 🟦 2.5 Monitoring
-- [ ] Add Prometheus metrics
-- [ ] Add `/healthz` and `/readyz` endpoints
-- [ ] Structured logging with trace IDs
+- [x] Add Prometheus metrics
+- [x] Add `/healthz` and `/readyz` endpoints
+- [x] Structured logging with trace IDs
 
 ---
 
@@ -117,28 +117,29 @@ A unified roadmap for building a fully automated, broker-independent, intelligen
 ## 📌 PHASE 4 – Trading Engine
 
 ### 🟦 4.1 Core Engine
-- [ ] Strategy interface
-- [ ] Connect live data to strategy
-- [ ] Add risk manager
-- [ ] Add circuit breaker logic
+- [x] Strategy interface
+- [x] Connect live data to strategy
+- [x] Add risk manager
+- [x] Add circuit breaker logic
 
 ### 🟦 4.2 Paper Trading Engine
-- [ ] Virtual portfolio with MTM
-- [ ] SL/TP logic, position sizing
-- [ ] Order simulator + logs
+- [x] Virtual portfolio with MTM
+- [x] SL/TP logic, position sizing
+- [x] Order simulator + logs
 
 ### 🟦 4.3 Strategy Set
-- [ ] EMA Crossover
-- [ ] MACD
-- [ ] RSI
-- [ ] Bollinger Bands
-- [ ] Adaptive RSI + MACD hybrid
+- [x] EMA Crossover
+- [x] MACD
+- [x] RSI
+- [x] Bollinger Bands
+- [x] Adaptive RSI + MACD hybrid
 
 ### 🟦 4.4 Backtesting
-- [ ] Historical data loader
-- [ ] Strategy simulator
-- [ ] Sharpe ratio, win rate, drawdown
-- [ ] Report generation (CSV/PDF)
+- [x] Historical data loader
+- [x] Strategy simulator
+- [x] Sharpe ratio, win rate, drawdown
+- [x] Report generation (CSV)
+- [ ] PDF export
 
 ---
 

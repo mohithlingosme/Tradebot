@@ -38,6 +38,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
             "cors_origins": list(settings.allow_origins),
             "name": settings.app_name,
             "version": settings.app_version,
+            "mode": settings.finbot_mode,
         },
         "database": database_info,
         "redis": {
@@ -54,6 +55,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
             "default_symbols": list(
                 settings.default_symbols
             ),
+            "live_trading_confirm": settings.live_trading_confirm,
         },
         "risk": {
             "max_drawdown": settings.max_drawdown,

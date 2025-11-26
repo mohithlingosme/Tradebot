@@ -1,0 +1,11 @@
+{
+  "name": "ema_crossover_intraday_index",
+  "description": "EMA crossover strategy for intraday Nifty/BankNifty.",
+  "params": {
+    "short_window": 9,
+    "long_window": 21,
+    "timeframe": "5m",
+    "symbol_universe": ["NIFTY", "BANKNIFTY"]
+  }
+}
+

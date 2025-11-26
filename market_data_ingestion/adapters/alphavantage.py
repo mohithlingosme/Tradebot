@@ -1,19 +1,25 @@
-import aiohttp
 import asyncio
 import logging
-from typing import Dict, Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+import aiohttp
 import tenacity
+
+from market_data_ingestion.adapters.base import BaseMarketDataAdapter, NormalizedTick
 from market_data_ingestion.src.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-class AlphaVantageAdapter:
+class AlphaVantageAdapter(BaseMarketDataAdapter):
+    provider = "alphavantage"
+
     def __init__(self, config: Dict[str, Any]):
-        self.config = config
+        super().__init__(config)
         self.api_key = config["api_key"]
         self.base_url = config["base_url"]
         self.rate_limit_delay = 60 / config.get("rate_limit_per_minute", 5)  # Delay in seconds
-        self.session = None
+        self.session: Optional[aiohttp.ClientSession] = None
 
     @tenacity.retry(
         stop=tenacity.stop_after_attempt(3),
@@ -86,10 +92,11 @@ class AlphaVantageAdapter:
 
         time_series = data[time_series_key]
         for timestamp, values in time_series.items():
+            ts = datetime.fromisoformat(timestamp).astimezone(timezone.utc)
             normalized_data.append(
                 {
                     "symbol": symbol,
-                    "ts_utc": timestamp,
+                    "ts_utc": ts.isoformat(),
                     "type": "candle",
                     "open": values["1. open"],
                     "high": values["2. high"],
@@ -102,6 +109,18 @@ class AlphaVantageAdapter:
             )
         return normalized_data
 
-    async def realtime_connect(self, symbols: list[str]):
-        # Alpha Vantage doesn't support realtime data
+    async def connect(self) -> None:
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+        await self._mark_connected(True)
+
+    async def close(self) -> None:
+        if self.session:
+            await self.session.close()
+        await self._mark_connected(False)
+
+    async def subscribe(self, symbols: list[str]) -> None:
+        self.symbols = symbols
+
+    async def stream(self):
         raise NotImplementedError("Alpha Vantage does not support realtime data")

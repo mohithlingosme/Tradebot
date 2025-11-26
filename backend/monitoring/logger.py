@@ -18,6 +18,7 @@ import threading
 import queue
 
 logger = logging.getLogger(__name__)
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 class LogLevel(Enum):
     DEBUG = "DEBUG"
@@ -101,9 +102,7 @@ class StructuredLogger:
         console_handler.setLevel(logging.INFO)
 
         # Structured formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
+        formatter = logging.Formatter(LOG_FORMAT)
         file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
 

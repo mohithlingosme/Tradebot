@@ -67,6 +67,26 @@ cd frontend && npm install && npm run dev
 ```
 You can also run data collector scripts (backfill, realtime, migrate) via `python data_collector/scripts/<name>.py`.
 
+### Dev runner (quick start)
+Use the consolidated helper to boot core services with mode awareness (`FINBOT_MODE=dev|paper|live`):
+```bash
+python -m scripts.dev_run backend
+python -m scripts.dev_run ingestion
+python -m scripts.dev_run engine
+```
+
+## Installation Modes
+- Core only (API + DB/auth/logging): `scripts\\install_core.bat` (uses `requirements-core.txt`).
+- Trading stack (core + data providers/analytics): `scripts\\install_trading.bat`.
+- Full stack (core + trading + indicators): `scripts\\install_full.bat` or `pip install -r requirements.txt`.
+- TA-Lib is optional; `pandas-ta` installs by default and works on Windows. Use WSL2/Docker if you need native TA-Lib.
+
+## Environment Modes
+- Templates: `.env.dev`, `.env.paper`, `.env.live` (copy to `.env` or pass with `uvicorn --env-file`).
+- Modes: `dev` = safe sandbox/mock data; `paper` = broker sandbox/paper trading; `live` = real brokers (requires `FINBOT_LIVE_TRADING_CONFIRM=true`).
+- Example: `uvicorn backend.app.main:app --reload --env-file .env.dev`
+- Live broker calls are blocked unless `FINBOT_MODE=live` **and** `FINBOT_LIVE_TRADING_CONFIRM=true`.
+
 ## Architecture
 Finbot stitches the frontend, backend, ingestion pipeline, trading engine, AI models, and data collector components together in one stack. View the architecture diagram in [`docs/architecture.md`](docs/architecture.md) for the full Mermaid graph and details.
 

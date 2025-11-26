@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Literal, Sequence
 
 try:
     # Prefer pydantic v1-style import
@@ -33,6 +33,13 @@ DEFAULT_NEWS_SOURCES = [
 
 class BackendSettings(BaseSettings):
     """Environment-driven settings for the Finbot backend."""
+
+    # Modes:
+    # - dev: safe sandbox, mock/test data
+    # - paper: paper-trading or broker sandbox
+    # - live: real orders; requires FINBOT_LIVE_TRADING_CONFIRM=true
+    finbot_mode: Literal["dev", "paper", "live"] = Field("dev", env="FINBOT_MODE")
+    live_trading_confirm: bool = Field(False, env="FINBOT_LIVE_TRADING_CONFIRM")
 
     app_env: str = Field("development", env="APP_ENV")
     app_name: str = Field("Finbot Trading API", env="APP_NAME")

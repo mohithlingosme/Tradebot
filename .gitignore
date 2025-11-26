@@ -147,6 +147,12 @@ ENV/
 env.bak/
 venv.bak/
 
+# Local project virtual environment dir
+.ven/
+
+# Dot-env local override files
+.env.*
+
 # Spyder project settings
 .spyderproject
 .spyproject

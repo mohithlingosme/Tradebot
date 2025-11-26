@@ -14,6 +14,7 @@ Features:
 
 import logging
 import asyncio
+import os
 import threading
 import time
 from typing import Dict, List, Optional, Callable, Any
@@ -25,6 +26,7 @@ import uuid
 from .strategy_manager import StrategyManager, BaseStrategy
 from risk_management.portfolio_manager import PortfolioManager
 from monitoring.logger import StructuredLogger, LogLevel, Component
+from risk.risk_manager import AccountState, OrderRequest, RiskLimits, RiskManager
 # from ..data_ingestion.data_fetcher import DataFetcher
 # from ..data_ingestion.data_loader import DataLoader
 
@@ -81,7 +83,9 @@ class LiveTradingEngine:
                  strategy_manager: StrategyManager,
                  portfolio_manager: PortfolioManager,
                  data_fetcher: Optional["DataFetcher"] = None,
-                 data_loader: Optional["DataLoader"] = None):
+                 data_loader: Optional["DataLoader"] = None,
+                 risk_manager: Optional[RiskManager] = None,
+                 risk_limits: Optional[RiskLimits] = None):
         """
         Initialize the LiveTradingEngine.
 
@@ -97,6 +101,7 @@ class LiveTradingEngine:
         self.portfolio_manager = portfolio_manager
         self.data_fetcher = data_fetcher
         self.data_loader = data_loader
+        self.risk_manager = risk_manager or RiskManager(risk_limits or RiskLimits())
 
         # Engine state
         self.state = EngineState.STOPPED
@@ -140,6 +145,17 @@ class LiveTradingEngine:
         try:
             self.state = EngineState.STARTING
             self._running = True
+
+            if self.config.mode == TradingMode.LIVE:
+                confirmation = os.getenv("FINBOT_LIVE_TRADING_CONFIRM", "").lower()
+                if confirmation not in ("1", "true", "yes", "on"):
+                    self.state = EngineState.ERROR
+                    self.logger.log(
+                        LogLevel.ERROR,
+                        Component.STRATEGY,
+                        "Live trading blocked: set FINBOT_LIVE_TRADING_CONFIRM=true to enable broker calls",
+                    )
+                    return False
 
             # Validate configuration
             if not self._validate_configuration():
@@ -497,6 +513,23 @@ class LiveTradingEngine:
     def _check_signal_risk_limits(self, result: ExecutionResult) -> bool:
         """Check if signal passes risk management limits"""
         try:
+            # Use dedicated risk manager as the primary gatekeeper
+            quantity = self._calculate_position_size(result.symbol, result.signal, result.confidence)
+            if quantity <= 0:
+                return False
+
+            account_state = self._build_account_state()
+            order_request = self._build_order_request(result, quantity)
+            ok, reason = self.risk_manager.validate_order(account_state, order_request)
+            if not ok:
+                self.logger.log(
+                    LogLevel.WARNING,
+                    Component.RISK_MGMT,
+                    f"Risk check failed: {reason}",
+                    data={"symbol": result.symbol, "signal": result.signal, "qty": quantity},
+                )
+                return False
+
             # Check portfolio-level risk limits
             risk_status = self.portfolio_manager.check_risk_limits()
             if not risk_status['overall_status']:
@@ -594,6 +627,40 @@ class LiveTradingEngine:
             'close': current_price,
             'volume': random.randint(1000, 10000)
         }
+
+    def _build_account_state(self) -> AccountState:
+        """Construct AccountState snapshot from the portfolio manager."""
+        equity = float(self.portfolio_manager.calculate_portfolio_value())
+        start_value = getattr(self.portfolio_manager, "_daily_start_value", equity)
+        todays_pnl = equity - start_value
+        open_positions = len([p for p in self.portfolio_manager.positions.values() if p.quantity != 0])
+        available_margin = float(getattr(self.portfolio_manager, "cash", equity))
+        return AccountState(
+            equity=equity,
+            todays_pnl=float(todays_pnl),
+            open_positions_count=open_positions,
+            available_margin=available_margin,
+        )
+
+    def _build_order_request(self, result: ExecutionResult, quantity: int) -> OrderRequest:
+        """Translate a signal into a conservative OrderRequest for risk checks."""
+        side = "BUY" if str(result.signal).lower() == "buy" else "SELL"
+        price = getattr(self, f'last_price_{result.symbol}', 100.0)
+        stop_buffer = price * 0.01
+        stop_price = price - stop_buffer if side == "BUY" else price + stop_buffer
+        current_position = self.portfolio_manager.positions.get(result.symbol)
+        reduces = current_position.quantity != 0 if current_position else False
+
+        return OrderRequest(
+            symbol=result.symbol,
+            side=side,
+            qty=max(1, quantity),
+            price=price,
+            product_type="INTRADAY",
+            instrument_type="EQUITY",
+            stop_price=stop_price,
+            reduces_position=reduces and side == "SELL",
+        )
 
     def _simulate_trade(self, symbol: str, signal: str, quantity: int) -> Dict:
         """Simulate a trade execution"""

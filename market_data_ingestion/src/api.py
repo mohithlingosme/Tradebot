@@ -20,7 +20,7 @@ async def startup_event():
     """Initialize database connection on startup."""
     await storage.connect()
     await storage.create_tables()
-    logger.info("Market Data API started")
+    logger.info("Market Data API started (mode=%s)", settings.finbot_mode)
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -32,6 +32,10 @@ async def shutdown_event():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "market-data-api"}
+
+@app.get("/healthz")
+async def healthz():
+    return await health_check()
 
 @app.get("/ready")
 async def readiness_check():
@@ -45,6 +49,10 @@ async def readiness_check():
     except Exception as e:
         logger.error(f"Readiness check failed: {e}")
         raise HTTPException(status_code=503, detail="Service not ready")
+
+@app.get("/readyz")
+async def readyz():
+    return await readiness_check()
 
 @app.get("/metrics")
 async def get_metrics():

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Literal
 
 from pydantic import BaseSettings, Field, validator
 
@@ -14,6 +14,24 @@ DEFAULT_PROVIDER_CONFIGS = {
         "api_key": "${ALPHAVANTAGE_API_KEY}",
         "base_url": "https://www.alphavantage.co",
         "rate_limit_per_minute": 5,
+    },
+    "fyers": {
+        "is_active": True,
+        "api_key": "${FYERS_API_KEY}",
+        "access_token": "${FYERS_ACCESS_TOKEN}",
+        "base_url": "https://api-t1.fyers.in/data",
+        "rate_limit_per_minute": 60,
+    },
+    "binance": {
+        "is_active": True,
+        "base_url": "https://api.binance.com/api/v3",
+        "rate_limit_per_minute": 1200,
+    },
+    "polygon": {
+        "is_active": True,
+        "api_key": "${POLYGON_API_KEY}",
+        "base_url": "https://api.polygon.io",
+        "rate_limit_per_minute": 300,
     },
     "kite_ws": {
         "is_active": True,
@@ -38,6 +56,7 @@ class MarketDataSettings(BaseSettings):
     """Shared configuration for the market data ingestion stack."""
 
     app_env: str = Field("development", env="APP_ENV")
+    finbot_mode: Literal["dev", "paper", "live"] = Field("dev", env="FINBOT_MODE")
     database_url: str = Field("sqlite:///market_data.db", env="MARKET_DATA_DATABASE_URL")
     config_path: Path = Field(
         Path("market_data_ingestion/config/config.example.yaml"),

@@ -9,9 +9,28 @@ This package contains the core trading engine components:
 """
 
 from .strategy_manager import StrategyManager, BaseStrategy, SignalStrength, StrategyPerformance
-from .backtester import Backtester, BacktestConfig, BacktestResult, BacktestMode, Trade
-from .strategies import AdaptiveRSIMACDStrategy, StrategyConfig, SignalType
-from .live_trading_engine import LiveTradingEngine, LiveTradingConfig, TradingMode, EngineState, ExecutionResult
+try:
+    from .backtester import Backtester, BacktestConfig, BacktestResult, BacktestMode, Trade
+except ModuleNotFoundError:
+    Backtester = None
+    BacktestConfig = None
+    BacktestResult = None
+    BacktestMode = None
+    Trade = None
+try:
+    from .strategies import AdaptiveRSIMACDStrategy, StrategyConfig, SignalType
+except ModuleNotFoundError:
+    AdaptiveRSIMACDStrategy = None
+    StrategyConfig = None
+    SignalType = None
+try:
+    from .live_trading_engine import LiveTradingEngine, LiveTradingConfig, TradingMode, EngineState, ExecutionResult
+except ModuleNotFoundError:
+    LiveTradingEngine = None
+    LiveTradingConfig = None
+    TradingMode = None
+    EngineState = None
+    ExecutionResult = None
 
 __all__ = [
     'StrategyManager',

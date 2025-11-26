@@ -1,16 +1,22 @@
 import asyncio
 import logging
-import yfinance as yf
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
 import pandas as pd
-from typing import Dict, Any, Optional
 import tenacity
+import yfinance as yf
+
+from market_data_ingestion.adapters.base import BaseMarketDataAdapter, NormalizedTick
 from market_data_ingestion.src.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-class YFinanceAdapter:
+class YFinanceAdapter(BaseMarketDataAdapter):
+    provider = "yfinance"
+
     def __init__(self, config: Dict[str, Any]):
-        self.config = config
+        super().__init__(config)
         self.rate_limit_delay = 60 / config.get("rate_limit_per_minute", 100)  # Delay in seconds
 
     @tenacity.retry(
@@ -64,7 +70,7 @@ class YFinanceAdapter:
             normalized_data.append(
                 {
                     "symbol": symbol,
-                    "ts_utc": str(index),
+                    "ts_utc": str(index.to_pydatetime().astimezone(timezone.utc)),
                     "type": "candle",
                     "open": float(row["Open"]),
                     "high": float(row["High"]),
@@ -77,6 +83,15 @@ class YFinanceAdapter:
             )
         return normalized_data
 
-    async def realtime_connect(self, symbols: list[str]):
-        # yfinance doesn't support realtime data
+    async def connect(self) -> None:
+        await self._mark_connected(True)
+
+    async def close(self) -> None:
+        await self._mark_connected(False)
+
+    async def subscribe(self, symbols: list[str]) -> None:
+        # yfinance is pull-only; nothing to do for subscribe
+        self.symbols = symbols
+
+    async def stream(self):
         raise NotImplementedError("yfinance does not support realtime data")

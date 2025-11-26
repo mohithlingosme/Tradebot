@@ -3,24 +3,29 @@ import json
 import logging
 import random
 import time
-from typing import Dict, Any, List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
-import websockets
 import tenacity
+import websockets
+
+from market_data_ingestion.adapters.base import BaseMarketDataAdapter, NormalizedTick
 from market_data_ingestion.src.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
-class KiteWebSocketAdapter:
+class KiteWebSocketAdapter(BaseMarketDataAdapter):
+    provider = "kite"
+
     def __init__(self, config: Dict[str, Any]):
-        self.config = config
+        super().__init__(config)
         self.api_key = config.get("api_key")
         self.api_secret = config.get("api_secret")
         self.websocket_url = config.get("websocket_url", "ws://localhost:8765")  # Mock server URL
         self.reconnect_interval = config.get("reconnect_interval", 5)
-        self.symbols = []
-        self.ws = None
+        self.symbols: List[str] = []
+        self.ws: Optional[websockets.WebSocketClientProtocol] = None
 
     async def __aenter__(self):
         return self
@@ -30,15 +35,11 @@ class KiteWebSocketAdapter:
             await self.ws.close()
 
     async def authenticate(self):
-        # In a real implementation, this would involve authenticating with the Kite API
-        # using the API key and secret. For the mock server, we just log a message.
         logger.info("Authenticating with Kite API (mock)")
         await asyncio.sleep(1)  # Simulate authentication delay
         return True
 
     async def subscribe(self, symbols: List[str]):
-        # In a real implementation, this would involve subscribing to the provided symbols
-        # via the Kite websocket. For the mock server, we just log a message.
         logger.info(f"Subscribing to symbols: {symbols} (mock)")
         self.symbols = symbols
         await asyncio.sleep(1)  # Simulate subscription delay
@@ -46,7 +47,6 @@ class KiteWebSocketAdapter:
     async def _send_heartbeat(self):
         while True:
             try:
-                # Send a ping message to the server
                 await self.ws.ping()
                 logger.debug("Sent heartbeat to server")
                 await asyncio.sleep(self.config.get("heartbeat_interval", 30))  # Send heartbeat every 30 seconds
@@ -66,6 +66,7 @@ class KiteWebSocketAdapter:
             async with websockets.connect(self.websocket_url) as ws:
                 self.ws = ws
                 logger.info(f"Connected to Kite WebSocket: {self.websocket_url}")
+                await self._mark_connected(True)
 
                 # Authenticate with the Kite API
                 if not await self.authenticate():
@@ -79,7 +80,9 @@ class KiteWebSocketAdapter:
                 heartbeat_task = asyncio.create_task(self._send_heartbeat())
 
                 # Start receiving messages
-                await self.receive_messages()
+                async for tick in self.stream():
+                    # In a full system, this would feed downstream. For now we just log.
+                    logger.debug(f"Tick: {tick.to_dict()}")
 
                 # Cancel heartbeat task if the connection closes
                 heartbeat_task.cancel()
@@ -87,13 +90,16 @@ class KiteWebSocketAdapter:
         except Exception as e:
             logger.error(f"Connection error: {e}")
             raise
+        finally:
+            await self._mark_connected(False)
 
-    async def receive_messages(self):
+    async def stream(self):
         """Receives messages from the WebSocket and processes them."""
         try:
             async for message in self.ws:
-                #logger.debug(f"Received message: {message}")
-                await self.process_message(message)
+                tick = await self.process_message(message)
+                if tick:
+                    yield tick
         except websockets.exceptions.ConnectionClosedError as e:
             logger.error(f"Connection closed: {e}")
         except Exception as e:
@@ -105,55 +111,30 @@ class KiteWebSocketAdapter:
         """Processes a message received from the WebSocket."""
         try:
             data = json.loads(message)
-            #logger.debug(f"Parsed message data: {data}")
-
-            # Normalize the data
-            normalized_data = self._normalize_data(data, "kite")
-
-            # Send to aggregator
-            from market_data_ingestion.core.aggregator import TickAggregator
-            aggregator = TickAggregator()
-            await aggregator.aggregate_tick(normalized_data)
-            await aggregator.flush_candles()  # Flush immediately for demo
-
-            # Process the normalized data (e.g., send to a channel for aggregation)
-            # For now, just print the normalized data
-            print(f"Normalized data: {normalized_data}")
+            normalized_data = self._normalize_data(data)
+            return normalized_data
         except json.JSONDecodeError:
             logger.warning(f"Received non-JSON message: {message}")
         except Exception as e:
             logger.error(f"Error processing message: {e}")
+        return None
 
-    def _normalize_data(self, data: Dict[str, Any], provider: str) -> Dict[str, Any]:
+    def _normalize_data(self, data: Dict[str, Any]) -> NormalizedTick:
         """Normalizes the data to a unified JSON structure based on Kite websocket format."""
-        # Kite websocket sends tick data in format like:
-        # {"instrument_token": 123, "last_price": 100.0, "timestamp": "2023-01-01T10:00:00Z", ...}
-        # Normalize to candle format for consistency
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
-            # Assume ISO format
-            pass
+            ts = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
         else:
-            timestamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(timestamp or time.time()))
+            ts = datetime.fromtimestamp(timestamp or time.time(), tz=timezone.utc)
 
-        return {
-            "symbol": data.get("instrument_token", "UNKNOWN"),  # Use token as symbol identifier
-            "ts_utc": timestamp,
-            "type": "tick",  # Kite provides ticks, not candles
-            "price": data.get("last_price", 0.0),
-            "qty": data.get("last_quantity", 0),
-            "open": data.get("ohlc", {}).get("open", 0.0),
-            "high": data.get("ohlc", {}).get("high", 0.0),
-            "low": data.get("ohlc", {}).get("low", 0.0),
-            "close": data.get("ohlc", {}).get("close", 0.0),
-            "volume": data.get("volume", 0),
-            "provider": provider,
-            "meta": {
-                "instrument_token": data.get("instrument_token"),
-                "mode": data.get("mode"),
-                "tradable": data.get("tradable"),
-            },
-        }
+        return NormalizedTick(
+            symbol=str(data.get("instrument_token", "UNKNOWN")),
+            ts_utc=ts,
+            price=self._normalize_price(data.get("last_price", 0.0)),
+            volume=float(data.get("volume", 0) or data.get("last_quantity", 0) or 0),
+            provider=self.provider,
+            raw=data,
+        )
 
     async def realtime_connect(self, symbols: List[str]):
         """Connects to the WebSocket and subscribes to the given symbols."""

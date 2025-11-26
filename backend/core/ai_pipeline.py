@@ -15,6 +15,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from .safety import SafetyContext, SafetyFilter, SafetyResult
+from ai.agents import NarrativeAI, ResearchAI, SignalAI
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ class PortfolioOptimizer:
 
 
 class AIPipeline:
-    """AI prompt processing pipeline."""
+    """AI prompt processing pipeline (advisory-only, never executes trades)."""
 
     def __init__(self, api_key: Optional[str] = None, model: str = "gpt-3.5-turbo"):
         """
@@ -153,6 +154,7 @@ class AIPipeline:
         self.optimizer = PortfolioOptimizer()
         self.safety_filter = SafetyFilter()
         self._load_knowledge_base()
+        self.advisory_only = True
 
         if OPENAI_AVAILABLE and self.api_key:
             try:
@@ -163,6 +165,11 @@ class AIPipeline:
                 logger.error(f"Failed to initialize OpenAI: {e}")
         else:
             logger.warning("AI pipeline initialized in mock mode (no OpenAI API key)")
+
+        # Compose role-specific agents to keep LLM responsibilities isolated.
+        self.research_ai = ResearchAI(self.run_prompt)
+        self.narrative_ai = NarrativeAI(self.research_ai, self.run_prompt)
+        self.signal_ai = SignalAI(self.run_prompt)
 
     def _build_safety_context(self, request: PromptRequest) -> SafetyContext:
         """Translate PromptRequest context into a SafetyContext."""
@@ -192,6 +199,32 @@ class AIPipeline:
             elif isinstance(finding, dict):
                 serialized.append(finding)
         return serialized
+
+    def run_prompt(
+        self,
+        *,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None,
+        max_tokens: int = 400,
+        temperature: float = 0.4,
+        use_finetuned_model: bool = True,
+        expect_json: bool = False,
+    ) -> PromptResponse:
+        """
+        Helper for downstream agents to invoke the LLM with safety metadata.
+        """
+        ctx = dict(context or {})
+        if expect_json:
+            ctx.setdefault("format", "json")
+            ctx["expect_json"] = True
+        request = PromptRequest(
+            prompt=prompt,
+            context=ctx or None,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            use_finetuned_model=use_finetuned_model,
+        )
+        return self.process_prompt(request)
 
     def process_prompt(self, request: PromptRequest) -> PromptResponse:
         """
@@ -270,35 +303,48 @@ class AIPipeline:
             market_data: Market data dictionary
 
         Returns:
-            Analysis text
+            Advisory-only analysis payload
         """
-        prompt = f"""
-        Analyze the following market data for {symbol} and provide a brief trading signal:
-        
-        Data: {market_data}
-        
-        Provide:
-        1. Current trend (bullish/bearish/neutral)
-        2. Key support/resistance levels
-        3. Risk assessment
-        4. Brief recommendation
-        """
-        
-        request = PromptRequest(
-            prompt=prompt,
-            context={"symbol": symbol, "data_type": "market_analysis"},
-            max_tokens=300,
-            temperature=0.5,
-            use_finetuned_model=True,
+        horizon = str(market_data.get("horizon") or "intraday")
+        if horizon not in {"intraday", "swing"}:
+            horizon = "intraday"
+        research_summary = self.research_ai.summarize_news(
+            [symbol],
+            articles=market_data.get("news"),
         )
-        
-        response = self.process_prompt(request)
+        sentiment_summary = self.research_ai.summarize_sentiment(
+            [symbol],
+            sentiment_samples=market_data.get("sentiment"),
+        )
+        narrative = self.narrative_ai.symbol_narrative(
+            symbol,
+            horizon=horizon,
+            research_summary=research_summary,
+            sentiment_summary=sentiment_summary,
+            market_data=market_data,
+        )
+        signal_payload = self.signal_ai.generate_signal(
+            symbol=symbol,
+            horizon=horizon,
+            research_summary=research_summary,
+            narrative=narrative,
+            market_snapshot=market_data,
+        )
+        llm_signal = signal_payload["signal"]
+        meta = signal_payload["meta"]
+
         return {
-            "analysis": response.response,
-            "disclaimer": response.disclaimer,
-            "safety_findings": response.safety_findings,
-            "blocked": response.blocked,
-            "confidence": response.confidence,
+            "symbol": symbol,
+            "analysis": narrative,
+            "research_summary": research_summary,
+            "sentiment_summary": sentiment_summary,
+            "signal": llm_signal.model_dump(),
+            "advisory_only": True,
+            "disclaimer": meta.get("disclaimer"),
+            "safety_findings": meta.get("safety_findings"),
+            "blocked": meta.get("blocked"),
+            "raw_signal_text": meta.get("raw_text"),
+            "confidence": getattr(llm_signal, "confidence", None),
         }
 
     def get_portfolio_advice(self, portfolio_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -337,6 +383,7 @@ class AIPipeline:
             "safety_findings": response.safety_findings,
             "blocked": response.blocked,
             "confidence": response.confidence,
+            "advisory_only": True,
         }
 
     def generate_research_brief(self, topic: str, focus: Optional[List[str]] = None) -> Dict[str, Any]:
@@ -390,6 +437,7 @@ class AIPipeline:
         prompt = f"""
         Design a trading plan for {symbol} with risk profile "{risk_profile}" and account size ${account_size:,.2f}.
         Include entry criteria, sizing, stop-loss, take-profit, and risk notes in JSON.
+        This output is advisory only and must not include broker or execution commands.
         """
         request = PromptRequest(
             prompt=prompt,
@@ -410,6 +458,7 @@ class AIPipeline:
             "safety_findings": response.safety_findings,
             "blocked": response.blocked,
             "confidence": response.confidence,
+            "advisory_only": True,
         }
         if response.blocked:
             payload["plan"] = {}
@@ -444,6 +493,7 @@ class AIPipeline:
         optimization["safety_findings"] = response.safety_findings
         optimization["blocked"] = response.blocked
         optimization["confidence"] = response.confidence
+        optimization["advisory_only"] = True
         return optimization
 
     def analyze_company_decision(self, company: str, question: str) -> Dict[str, Any]:

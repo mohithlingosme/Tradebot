@@ -17,11 +17,15 @@ from .routers import auth, health, portfolio, positions, strategy, system, trade
 from .sim import simulator
 from .telemetry import RequestTimingMiddleware, configure_sentry
 from .security.middleware import EnforceHTTPSMiddleware, SecurityHeadersMiddleware
+
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+
+
 def configure_logging() -> None:
     """Setup file + console logging with rotation."""
     level_name = settings.log_level.upper()
     level = getattr(logging, level_name, logging.INFO)
-    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter(LOG_FORMAT)
 
     log_dir = os.path.dirname(settings.log_file)
     if log_dir:
@@ -48,6 +52,7 @@ def configure_logging() -> None:
 
 configure_logging()
 logger = logging.getLogger(__name__)
+logger.info("Backend logging initialized (mode=%s)", settings.finbot_mode)
 
 app = FastAPI(title=settings.app_name, version="1.1.0")
 # Run with: uvicorn backend.app.main:app --reload
@@ -89,7 +94,7 @@ connected_clients: List[WebSocket] = []
 async def startup_event():
     """Initialize database on startup."""
     create_db_and_tables()
-    logger.info("Database initialized")
+    logger.info("Database initialized (mode=%s)", settings.finbot_mode)
 
 @app.get("/health")
 async def health_check():
