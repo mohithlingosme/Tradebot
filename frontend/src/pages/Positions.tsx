@@ -6,22 +6,31 @@ const fmtCurrency = (value: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value)
 
 function PositionsPage() {
-  const { positions, isLive } = useDashboardFeed()
+  const { positions, isLive, refreshSnapshot, isRefreshing, lastUpdated } = useDashboardFeed()
+  const activePositions = useMemo(() => positions.filter((p) => p.quantity !== 0), [positions])
   const totals = useMemo(() => {
-    const unrealized = positions.reduce((acc, p) => acc + p.pnl, 0)
+    const unrealized = activePositions.reduce((acc, p) => acc + p.pnl, 0)
     return { unrealized }
-  }, [positions])
+  }, [activePositions])
 
   return (
     <div className="dashboard-shell">
-      <div className="live-indicator" aria-label="live-status">
-        <span className={`dot ${isLive ? '' : 'offline'}`} />
-        {isLive ? 'Live positions' : 'Offline (last snapshot)'}
+      <div className="section-header">
+        <div className="live-indicator" aria-label="live-status">
+          <span className={`dot ${isLive ? '' : 'offline'}`} />
+          {isLive ? 'Live positions' : 'Snapshot / polling'}
+        </div>
+        <div className="section-actions">
+          {lastUpdated && <span className="faint-text">Updated {new Date(lastUpdated).toLocaleTimeString()}</span>}
+          <button className="ghost-button" onClick={refreshSnapshot} disabled={isRefreshing}>
+            {isRefreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       <div className="panel">
         <h2>Open Positions</h2>
-        {positions.length === 0 ? (
+        {activePositions.length === 0 ? (
           <div>No open positions.</div>
         ) : (
           <table className="table">
@@ -35,7 +44,7 @@ function PositionsPage() {
               </tr>
             </thead>
             <tbody>
-              {positions.map((pos) => (
+              {activePositions.map((pos) => (
                 <tr key={pos.symbol}>
                   <td>{pos.symbol}</td>
                   <td>{pos.quantity}</td>

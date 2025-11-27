@@ -1,0 +1,9 @@
+flowchart LR
+  UserInput[User Prompt] --> PromptBuilder[Prompt Builder]
+  Context[Market/Portfolio Context] --> PromptBuilder
+  PromptBuilder --> LLM[AI / LLM Model]
+  LLM --> Parser[Parser / Post-Processor]
+  Parser --> Suggestions[Plans / Recommendations]
+  Suggestions --> Guardrails[Disclaimers + Mode Flags]
+  Guardrails --> API[Backend API Response]
+  API --> UI[Frontend AI UI]

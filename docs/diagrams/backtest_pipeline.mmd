@@ -1,0 +1,7 @@
+flowchart LR
+  Historical[Historical Data (DB/CSV/API)] --> Backtest[Backtest Engine]
+  Backtest --> Strategy[Strategy Logic]
+  Strategy --> Simulator[Trade Simulator (fills/slippage/fees)]
+  Simulator --> Metrics[Metrics (P&L, DD, Sharpe)]
+  Metrics --> Reports[Reports / Artifacts]
+  Reports --> Reviewer[Developer Review]

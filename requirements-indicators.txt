@@ -1,7 +1,8 @@
 # Technical indicators layer (optional) builds on trading stack
 -r requirements-trading.txt
 
-pandas-ta==0.3.14b0
+# pandas-ta: compatible with Python 3.12; official beta builds ship on PyPI.
+pandas-ta-classic
 
 # TA-Lib is optional. It requires system-level TA-Lib libraries and C/C++ build tools.
 # On Windows, prefer pandas-ta or install via WSL2/Docker if you need TA-Lib.

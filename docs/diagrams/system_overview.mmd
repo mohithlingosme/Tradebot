@@ -1,0 +1,13 @@
+flowchart LR
+  User --> Frontend[Frontend (React/Tauri)]
+  Frontend --> Backend[Backend (FastAPI)]
+  Backend --> Trading[Trading Engine / Risk]
+  Backend --> MarketData[Market Data Ingestion]
+  Backend --> AI[AI / LLM Pipeline]
+  Backend --> DB[(DB/Cache: Postgres/Redis/SQLite)]
+  Trading --> Broker[Broker / Paper Adapter]
+  MarketData --> DB
+  MarketData --> Backend
+  AI --> Backend
+  Backend --> Streams[WebSockets / REST]
+  Streams --> Frontend

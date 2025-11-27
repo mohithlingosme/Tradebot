@@ -40,6 +40,7 @@ class BackendSettings(BaseSettings):
     # - live: real orders; requires FINBOT_LIVE_TRADING_CONFIRM=true
     finbot_mode: Literal["dev", "paper", "live"] = Field("dev", env="FINBOT_MODE")
     live_trading_confirm: bool = Field(False, env="FINBOT_LIVE_TRADING_CONFIRM")
+    app_use_case: str = Field("PERSONAL_EXPERIMENTAL", env="APP_USE_CASE")
 
     app_env: str = Field("development", env="APP_ENV")
     app_name: str = Field("Finbot Trading API", env="APP_NAME")

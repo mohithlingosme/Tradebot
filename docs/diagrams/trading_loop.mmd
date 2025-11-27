@@ -1,0 +1,10 @@
+flowchart LR
+  Market[Market Data (WS/Poll)] --> Strategy[Strategy Engine]
+  Strategy --> Risk[Risk Manager]
+  Risk -->|Approved| OrderRouter[Order Router]
+  Risk -->|Blocked| Audit[Log / Alert]
+  OrderRouter --> Broker[Broker / Paper Adapter]
+  Broker --> Positions[Positions & PnL]
+  Positions --> Stream[Backend WS/REST]
+  Stream --> UI[Frontend Dashboard]
+  Positions --> Metrics[Logs / Metrics]

@@ -47,10 +47,11 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 git clone <repo-url>
 cd blackboxai-finbot
 
-# 1. Create a Python virtualenv and install deps
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
-pip install -r requirements-dev.txt
+# 1. Create a Python 3.12 virtualenv and install deps
+py -3.12 -m venv .venv      # Windows (or: python3.12 -m venv .venv)
+.venv\Scripts\activate      # Windows (or: source .venv/bin/activate)
+pip install --upgrade pip
+pip install -r requirements.txt
 
 # 2. Prepare environment variables
 cp .env.example .env
@@ -106,10 +107,12 @@ The compose file spins up the backend API, PostgreSQL, and the ingestion profile
 - Run the observability checklist (`/health`, `/api/metrics`, `/api/logs`) documented at `docs/ops/staging_checklist.md` after every deploy.
 
 ## Documentation
+- Start at [`docs/README.md`](./docs/README.md) for architecture, trading loop, AI pipeline, backtest pipeline, and module map.
 - `docs/README_FINBOT.md`: High-level product overview and usage guidance
 - `docs/README_MARKET_DATA.md`: Ingestion deployment notes and operational checklists
 - `docs/trading_engine/`: Strategy and backtesting walkthroughs
 - `docs/architecture.md`: Component interaction diagram
+- MVP run guide: [`docs/mvp_guide.md`](./docs/mvp_guide.md) for the paper-mode EMA crossover loop and dashboard.
 
 ## Future Work
 - Expand AI assistant coverage with more models and knowledge connectors

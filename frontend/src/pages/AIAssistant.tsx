@@ -179,6 +179,10 @@ export default function AIAssistant() {
       <div className="ai-header">
         <h1>AI Trading Assistant</h1>
         <p className="subtitle">Get AI-powered insights for your trading decisions</p>
+        <div className="ai-disclaimer">
+          AI output for educational use only. Do not treat this as advice to buy/sell/hold any security. Consult a
+          SEBI-registered investment adviser before acting on any output.
+        </div>
       </div>
 
       <div className="prompt-templates">
@@ -254,6 +258,9 @@ export default function AIAssistant() {
               {loading ? 'Sending...' : 'Send'}
             </button>
           </div>
+        </div>
+        <div className="ai-disclaimer subtle">
+          This assistant is experimental and not cleared for public distribution without legal/regulatory review.
         </div>
       </div>
     </div>

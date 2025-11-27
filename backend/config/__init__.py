@@ -39,6 +39,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
             "name": settings.app_name,
             "version": settings.app_version,
             "mode": settings.finbot_mode,
+            "use_case": settings.app_use_case,
         },
         "database": database_info,
         "redis": {

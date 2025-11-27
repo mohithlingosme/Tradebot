@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { API_BASE_URL, fetchLogs, fetchOrders, fetchPnl, fetchPositions, fetchRiskStatus, fetchStrategyStatus, LogEntry, OrderRow, PnLStatus, Position, RiskStatus, StrategyStatus, withApiPrefix } from '../services/api'
+import {
+  API_BASE_URL,
+  fetchLogs,
+  fetchOrders,
+  fetchPnl,
+  fetchPositions,
+  fetchRiskStatus,
+  fetchStrategyStatus,
+  LogEntry,
+  OrderRow,
+  PnLStatus,
+  Position,
+  RiskStatus,
+  StrategyStatus,
+  withApiPrefix,
+} from '../services/api'
 import { useWebSocket } from './useWebSocket'
 
-interface DashboardFeed {
+interface DashboardFeedState {
   pnl: PnLStatus
   positions: Position[]
   orders: OrderRow[]
@@ -10,9 +25,15 @@ interface DashboardFeed {
   strategy: StrategyStatus
   risk: RiskStatus
   isLive: boolean
+  lastUpdated?: string
 }
 
-const defaultFeed: DashboardFeed = {
+interface DashboardFeed extends DashboardFeedState {
+  isRefreshing: boolean
+  refreshSnapshot: () => Promise<void>
+}
+
+const defaultFeed: DashboardFeedState = {
   pnl: { total: 0, realized: 0, unrealized: 0 },
   positions: [],
   orders: [],
@@ -20,6 +41,7 @@ const defaultFeed: DashboardFeed = {
   strategy: { name: 'Unknown', state: 'STOPPED' },
   risk: { max_daily_loss_pct: 0.05, used_pct: 0, circuit_breaker: false },
   isLive: false,
+  lastUpdated: undefined,
 }
 
 type WsMessage =
@@ -29,7 +51,7 @@ type WsMessage =
   | { type: 'log'; log: LogEntry }
   | { type: 'strategy'; strategy: StrategyStatus }
   | { type: 'risk'; risk: RiskStatus }
-  | Record<string, any>
+  | { type: 'snapshot'; pnl: PnLStatus; positions: Position[]; orders: OrderRow[]; logs: LogEntry[]; strategy: StrategyStatus; risk: RiskStatus }
 
 export const buildDashboardWsUrl = () => {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL as string
@@ -43,18 +65,20 @@ export const buildDashboardWsUrl = () => {
 }
 
 export const useDashboardFeed = (): DashboardFeed => {
-  const [feed, setFeed] = useState<DashboardFeed>(defaultFeed)
+  const [feed, setFeed] = useState<DashboardFeedState>(defaultFeed)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const wsUrl = useMemo(buildDashboardWsUrl, [])
 
-  useEffect(() => {
-    const loadInitial = async () => {
+  const refreshSnapshot = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
       const [pnl, positions, orders, logs, strategy, risk] = await Promise.all([
-        fetchPnl(),
-        fetchPositions().catch(() => []),
-        fetchOrders().catch(() => []),
-        fetchLogs().catch(() => []),
-        fetchStrategyStatus(),
-        fetchRiskStatus(),
+        fetchPnl().catch(() => defaultFeed.pnl),
+        fetchPositions().catch(() => defaultFeed.positions),
+        fetchOrders().catch(() => defaultFeed.orders),
+        fetchLogs().catch(() => defaultFeed.logs),
+        fetchStrategyStatus().catch(() => defaultFeed.strategy),
+        fetchRiskStatus().catch(() => defaultFeed.risk),
       ])
       setFeed((prev) => ({
         ...prev,
@@ -64,32 +88,61 @@ export const useDashboardFeed = (): DashboardFeed => {
         logs,
         strategy,
         risk,
+        lastUpdated: new Date().toISOString(),
       }))
+    } finally {
+      setIsRefreshing(false)
     }
-    loadInitial()
   }, [])
+
+  useEffect(() => {
+    refreshSnapshot()
+  }, [refreshSnapshot])
 
   const handleOpen = useCallback(() => setFeed((prev) => ({ ...prev, isLive: true })), [])
   const handleClose = useCallback(() => setFeed((prev) => ({ ...prev, isLive: false })), [])
-  const handleMessage = useCallback((message: WsMessage) => {
+  const handleError = useCallback(() => setFeed((prev) => ({ ...prev, isLive: false })), [])
+  const handleMessage = useCallback((message: any) => {
+    const payload = message as WsMessage
     setFeed((prev) => {
-      switch (message.type) {
+      const lastUpdated = new Date().toISOString()
+      switch (payload.type) {
         case 'pnl':
-          return { ...prev, pnl: { total: message.total, realized: message.realized ?? prev.pnl.realized, unrealized: message.unrealized ?? prev.pnl.unrealized } }
+          return {
+            ...prev,
+            pnl: {
+              total: payload.total,
+              realized: payload.realized ?? prev.pnl.realized,
+              unrealized: payload.unrealized ?? prev.pnl.unrealized,
+            },
+            lastUpdated,
+          }
         case 'order': {
-          const updated = [message.order, ...prev.orders].slice(0, 50)
-          return { ...prev, orders: updated }
+          const updated = [payload.order, ...prev.orders].slice(0, 50)
+          return { ...prev, orders: updated, lastUpdated }
         }
         case 'position':
-          return { ...prev, positions: message.positions }
+          return { ...prev, positions: payload.positions, lastUpdated }
         case 'log': {
-          const updatedLogs = [message.log, ...prev.logs].slice(0, 200)
-          return { ...prev, logs: updatedLogs }
+          const updatedLogs = [payload.log, ...prev.logs].slice(0, 200)
+          return { ...prev, logs: updatedLogs, lastUpdated }
         }
         case 'strategy':
-          return { ...prev, strategy: message.strategy }
+          return { ...prev, strategy: payload.strategy, lastUpdated }
         case 'risk':
-          return { ...prev, risk: message.risk }
+          return { ...prev, risk: payload.risk, lastUpdated }
+        case 'snapshot':
+          return {
+            ...prev,
+            pnl: payload.pnl,
+            positions: payload.positions,
+            orders: payload.orders,
+            logs: payload.logs,
+            strategy: payload.strategy,
+            risk: payload.risk,
+            isLive: true,
+            lastUpdated,
+          }
         default:
           return prev
       }
@@ -101,7 +154,23 @@ export const useDashboardFeed = (): DashboardFeed => {
     onOpen: handleOpen,
     onClose: handleClose,
     onMessage: handleMessage,
+    onError: handleError,
+    reconnect: true,
+    reconnectIntervalMs: 5000,
+    maxReconnectAttempts: 50,
   })
 
-  return feed
+  const isLive = feed.isLive
+
+  useEffect(() => {
+    if (isLive) return
+    const id = window.setInterval(() => {
+      refreshSnapshot().catch(() => {
+        /* best-effort */
+      })
+    }, 15000)
+    return () => clearInterval(id)
+  }, [isLive, refreshSnapshot])
+
+  return { ...feed, isRefreshing, refreshSnapshot }
 }

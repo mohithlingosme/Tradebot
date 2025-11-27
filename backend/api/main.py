@@ -65,6 +65,11 @@ except ImportError:
     PortfolioManager = None
     get_logger = lambda: None
 
+try:
+    from .mvp import mvp_engine
+except Exception:
+    mvp_engine = None
+
 # Global configuration
 APP_START_TIME = datetime.utcnow()
 EXTERNAL_HEALTH_ENDPOINTS = {
@@ -415,14 +420,15 @@ async def get_portfolio():
     Returns:
         Portfolio summary dictionary
     """
-    if not portfolio_manager:
-        raise HTTPException(status_code=503, detail="Portfolio manager not available")
-
-    try:
-        return portfolio_manager.get_portfolio_summary()
-    except Exception as e:
-        logger.error(f"Error getting portfolio: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    if portfolio_manager:
+        try:
+            return portfolio_manager.get_portfolio_summary()
+        except Exception as e:
+            logger.error(f"Error getting portfolio: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
+    if mvp_engine:
+        return mvp_engine.broker.portfolio_summary()
+    raise HTTPException(status_code=503, detail="Portfolio manager not available")
 
 @app.get("/positions")
 async def get_positions():
@@ -432,14 +438,15 @@ async def get_positions():
     Returns:
         List of position dictionaries
     """
-    if not portfolio_manager:
-        raise HTTPException(status_code=503, detail="Portfolio manager not available")
-
-    try:
-        return portfolio_manager.get_position_summary()
-    except Exception as e:
-        logger.error(f"Error getting positions: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    if portfolio_manager:
+        try:
+            return portfolio_manager.get_position_summary()
+        except Exception as e:
+            logger.error(f"Error getting positions: {e}")
+            raise HTTPException(status_code=500, detail="Internal server error")
+    if mvp_engine:
+        return mvp_engine.broker.get_positions()
+    raise HTTPException(status_code=503, detail="Portfolio manager not available")
 
 @app.get("/strategies")
 async def get_strategies():
@@ -460,6 +467,14 @@ async def get_strategies():
     except Exception as e:
         logger.error(f"Error getting strategies: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/orders/recent")
+async def get_recent_orders(limit: int = 50):
+    """Return recent orders (MVP mock broker when available)."""
+    if mvp_engine:
+        return mvp_engine.broker.get_orders(limit=limit)
+    raise HTTPException(status_code=503, detail="Orders not available")
 
 @app.post("/strategies/{action}")
 async def manage_strategy(action: str, strategy_name: str):
@@ -602,7 +617,7 @@ async def get_logs(
     limit: int = Query(100, ge=1, le=500, description="Number of log entries to return (max 500)"),
     since: Optional[datetime] = Query(None, description="Return entries after this timestamp"),
     until: Optional[datetime] = Query(None, description="Return entries before this timestamp"),
-    current_admin: Dict = Depends(get_current_admin_user),
+    current_admin: Dict = Depends(get_current_active_user),
 ):
     """
     Return structured log entries with filtering and masking of sensitive data.
@@ -610,6 +625,8 @@ async def get_logs(
     try:
         log_file = Path(settings.log_file)
         if not log_file.exists():
+            if mvp_engine:
+                return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp"}
             return {"logs": [], "total_lines": 0, "message": "No log file found"}
 
         requested_level = level.upper() if level else None
@@ -771,6 +788,31 @@ async def websocket_trades(websocket: WebSocket):
         await trade_stream_manager.unsubscribe(subscriber)
         await websocket.close()
 
+
+@app.websocket("/ws/dashboard")
+async def websocket_dashboard(websocket: WebSocket):
+    """Stream MVP dashboard snapshots (paper mode simulator)."""
+    if not mvp_engine:
+        await websocket.close(code=1011)
+        return
+    await websocket.accept()
+    subscriber = await mvp_engine.subscribe()
+    try:
+        await websocket.send_json({"type": "status", "message": "subscribed", "mode": "PAPER"})
+        while True:
+            try:
+                message = await asyncio.wait_for(subscriber.get(), timeout=15)
+                await websocket.send_json(message)
+            except asyncio.TimeoutError:
+                await websocket.send_json(
+                    {"type": "keepalive", "timestamp": datetime.now().isoformat(), "mode": "PAPER"}
+                )
+    except WebSocketDisconnect:
+        logger.info("Dashboard WebSocket client disconnected")
+    finally:
+        await mvp_engine.unsubscribe(subscriber)
+        await websocket.close()
+
 # Authentication endpoints
 @app.post("/auth/login", response_model=TokenResponse)
 async def login(credentials: UserCredentials):
@@ -881,6 +923,18 @@ async def forgot_password(request: ForgotPasswordRequest):
     return {
         "message": "If an account exists with this email, you will receive password reset instructions."
     }
+
+
+@app.on_event("startup")
+async def start_mvp_loop():
+    if mvp_engine and settings.finbot_mode != "live":
+        await mvp_engine.start()
+
+
+@app.on_event("shutdown")
+async def stop_mvp_loop():
+    if mvp_engine and mvp_engine.running:
+        await mvp_engine.stop()
 
 # Trade execution model
 class TradeRequest(BaseModel):
@@ -1058,6 +1112,10 @@ async def api_portfolio():
 async def api_positions():
     return await get_positions()
 
+@api_router.get("/orders/recent")
+async def api_orders_recent(limit: int = 50):
+    return await get_recent_orders(limit=limit)
+
 
 @api_router.post("/trades")
 async def api_trades(trade: TradeRequest, current_user: Dict = Depends(get_current_active_user)):
@@ -1080,9 +1138,14 @@ async def api_logs(
     limit: int = Query(100, ge=1, le=500),
     since: Optional[datetime] = Query(None),
     until: Optional[datetime] = Query(None),
-    current_admin: Dict = Depends(get_current_admin_user),
+    current_admin: Dict = Depends(get_current_active_user),
 ):
     return await get_logs(level=level, limit=limit, since=since, until=until, current_admin=current_admin)
+
+
+@api_router.websocket("/ws/dashboard")
+async def api_ws_dashboard(websocket: WebSocket):
+    await websocket_dashboard(websocket)
 
 
 app.include_router(api_router)
