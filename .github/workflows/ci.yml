@@ -57,7 +57,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov pytest-asyncio black isort flake8
+        pip install pytest pytest-cov pytest-asyncio black isort flake8 yamllint
 
     - name: Lint with flake8
       run: |
@@ -71,6 +71,20 @@ jobs:
     - name: Check import sorting with isort
       run: |
         isort --check-only --profile black .
+
+    - name: Lint YAML files
+      run: |
+        yamllint .github/workflows/*.yml .github/workflows/*.yaml
+
+    - name: Pre-flight checks
+      run: |
+        python --version
+        pip --version
+        python -c "import sys; print(f'Python version: {sys.version}')"
+
+    - name: Run safety audit
+      run: |
+        python scripts/safety_audit.py
 
     - name: Run unit tests
       env:

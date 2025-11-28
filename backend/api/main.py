@@ -617,13 +617,19 @@ async def get_logs(
     limit: int = Query(100, ge=1, le=500, description="Number of log entries to return (max 500)"),
     since: Optional[datetime] = Query(None, description="Return entries after this timestamp"),
     until: Optional[datetime] = Query(None, description="Return entries before this timestamp"),
-    current_admin: Dict = Depends(get_current_active_user),
+    current_admin: Dict = Depends(get_current_admin_user),
 ):
     """
     Return structured log entries with filtering and masking of sensitive data.
     """
     try:
-        log_file = Path(settings.log_file)
+        log_file_path = getattr(settings, 'log_file', None)
+        if not log_file_path:
+            if mvp_engine:
+                return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp"}
+            return {"logs": [], "total_lines": 0, "message": "Log file configuration missing"}
+
+        log_file = Path(log_file_path)
         if not log_file.exists():
             if mvp_engine:
                 return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp"}

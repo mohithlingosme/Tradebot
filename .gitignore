@@ -214,3 +214,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Repository cleanup: unused/legacy directories and files
+old_scripts/
+experiments/
+temp/
+finbot-frontend/
+node_modules/
+.DS_Store
+*.bak
+*.swp
