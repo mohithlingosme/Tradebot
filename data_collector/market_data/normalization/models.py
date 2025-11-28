@@ -5,7 +5,7 @@ Canonical Pydantic models for market data.
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Annotated
-from pydantic import BaseModel, Field, Decimal as PydanticDecimal
+from pydantic import BaseModel, Field
 from pydantic.functional_validators import field_validator
 from uuid import UUID
 

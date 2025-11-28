@@ -3,6 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="market-data-backend",
     version="0.1.0",
+    python_requires=">=3.11.9,<3.12",
     packages=find_packages(),
     install_requires=[
         "fastapi==0.104.1",

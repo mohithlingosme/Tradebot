@@ -2,11 +2,12 @@ Current Work:
 
 Analyzing the issues in 'testingissues.md' which details various problems with automated testing and CI/CD workflow for the blackboxai-finbot project.
 The issues include missing pipeline/E2E tests, dependency complexity with TA-Lib, failing tests, version issues, workflow syntax problems, path issues, and pipeline failures.
+
 Key Technical Concepts:
 
 Automated Testing: Unit, Integration, E2E, Performance/Load tests using pytest, k6, etc.
 CI/CD: GitHub Actions workflows for testing, building, and deploying.
-Dependencies: Python 3.12, TA-Lib optional, pandas-ta fallback, layered requirements files.
+Dependencies: Python 3.11.9, TA-Lib optional, pandas-ta fallback, layered requirements files.
 Testing Frameworks: pytest, pytest-asyncio, pytest-cov, unittest.
 Linting/Type Checking: flake8, mypy, black, isort, ruff.
 Load Testing: k6 for HTTP load testing.
@@ -23,7 +24,7 @@ scripts/safety_audit.py: Safety audit script.
 docs/reports/project_status.md: Project status report.
 Problem Solving:
 
-Identified that CI workflows use Python 3.8-3.11 but docs specify 3.12.
+Identified that CI workflows use Python 3.8-3.11 but docs specified Python 3.12 (updated to 3.11.9).
 Missing E2E tests directory is empty.
 TA-Lib is optional but causes issues; pandas-ta is recommended.
 Workflow syntax issues: missing yamllint, incorrect Python versions.
@@ -32,7 +33,7 @@ Missing .env.example file.
 Pipeline failures due to environment misconfigurations.
 Pending Tasks and Next Steps:
 
-Update CI/CD workflows to use Python 3.12 and add yamllint.
+Update CI/CD workflows to use Python 3.11.9 and add yamllint.
 Add missing E2E tests for full trading workflows.
 Fix failing integration tests for log endpoints.
 Update requirements to use pandas-ta instead of TA-Lib.

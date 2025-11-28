@@ -4,7 +4,7 @@ import secrets
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     log_backup_count: int = Field(5, env="LOG_BACKUP_COUNT")
     log_scan_limit: int = Field(2000, env="LOG_SCAN_LIMIT")
 
+    enforce_https: bool = Field(default=False, env="ENFORCE_HTTPS")
+
     jwt_secret_key: str = Field(
         default_factory=lambda: secrets.token_urlsafe(32),
         env="JWT_SECRET_KEY",
@@ -50,9 +52,8 @@ class Settings(BaseSettings):
     default_user_username: str = Field(default="user", env="DEFAULT_USER_USERNAME")
     default_user_password: str = Field(default="userpass", env="DEFAULT_USER_PASSWORD")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Model configuration for pydantic v2
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 @lru_cache

@@ -3,7 +3,7 @@
 This guide brings up the paper-mode MVP: simulated NIFTY/BANKNIFTY feed, EMA 9/21 crossover strategy, risk checks, mock broker, and the React/Tauri dashboard.
 
 ## Prerequisites
-- Python 3.12+
+- Python 3.11+
 - Node.js 18+ and npm
 - Git; Docker optional (not required for the MVP)
 
@@ -12,11 +12,10 @@ This guide brings up the paper-mode MVP: simulated NIFTY/BANKNIFTY feed, EMA 9/2
 git clone <repo-url>
 cd blackboxai-finbot
 
-py -3.12 -m venv .venv       # Windows (or: python3.12 -m venv .venv)
-.venv\Scripts\activate       # Windows (or: source .venv/bin/activate)
+python -m venv .venv
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
 
-pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 cp .env.example .env         # ensure FINBOT_MODE=dev/paper
 ```
@@ -24,7 +23,6 @@ cp .env.example .env         # ensure FINBOT_MODE=dev/paper
 ## 2) Run the backend (PAPER loop + API)
 The FastAPI app auto-starts the paper trading loop (simulated feed + EMA strategy + mock broker).
 ```bash
-uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 Key endpoints used by the dashboard:
 - `GET /portfolio`

@@ -7,15 +7,15 @@ on:
     branches: [ main ]
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: docker.io
+  IMAGE_NAME: mohith7007/finbot-backend
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, "3.10", "3.11"]
+        python-version: [3.8, 3.9, "3.10", "3.11.9"]
 
     steps:
     - uses: actions/checkout@v3
@@ -56,8 +56,8 @@ jobs:
       uses: docker/login-action@v2
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: mohith7007
+        password: "@--Dcmk2664"
 
     - name: Extract metadata
       id: meta
@@ -95,8 +95,8 @@ jobs:
       uses: docker/login-action@v2
       with:
         registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+        username: mohith7007
+        password: "@--Dcmk2664"
 
     - name: Build and push staging image
       uses: docker/build-push-action@v4

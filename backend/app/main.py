@@ -62,7 +62,13 @@ configure_sentry()
 # Add middleware
 app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(EnforceHTTPSMiddleware)
+if settings.enforce_https:
+    app.add_middleware(EnforceHTTPSMiddleware)
+else:
+    logger.info(
+        "HTTPS enforcement disabled (environment=%s). Set ENFORCE_HTTPS=1 to enable redirects.",
+        settings.environment,
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allow_origins,

@@ -32,8 +32,7 @@ An intelligent, autonomous trading bot for intraday and F&O trading that leverag
 
 ## Tech Stack
 
-### Backend
-- **Python 3.11+**
+- **Python 3.11.9+**
 - **FastAPI** for REST API and WebSockets
 - **AsyncIO** for concurrent operations
 - **SQLAlchemy** for database abstraction
@@ -62,7 +61,7 @@ An intelligent, autonomous trading bot for intraday and F&O trading that leverag
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.11.9+
 - Docker (optional, for containerized deployment)
 
 ## Quick Start

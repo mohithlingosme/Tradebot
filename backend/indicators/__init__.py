@@ -23,7 +23,6 @@ from .aroon import Aroon
 from .auto_fib_extension import AutoFibExtension
 from .auto_fib_retracement import AutoFibRetracement
 from .auto_trendlines import AutoTrendlines
-from .average_day_range import AverageDayRange
 
 __all__ = [
     'RSI',
@@ -44,6 +43,5 @@ __all__ = [
     'Aroon',
     'AutoFibExtension',
     'AutoFibRetracement',
-    'AutoTrendlines',
-    'AverageDayRange'
+    'AutoTrendlines'
 ]

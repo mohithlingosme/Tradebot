@@ -15,6 +15,7 @@ from market_data_ingestion.core.tasks.backfill_runner import BackfillRunner, Bac
 from market_data_ingestion.src.logging_config import setup_logging
 from market_data_ingestion.src.settings import settings
 import tenacity
+import csv
 
 # Set up logging
 setup_logging()
@@ -32,8 +33,15 @@ async def backfill(args):
     Supports CSV file input and direct symbol list.
     """
     logging.info(f"Running backfill with symbols={args.symbols} period={args.period} interval={args.interval}")
+    if not args.symbols and not getattr(args, "csv_file", None):
+        raise ValueError("No symbols provided")
+
+    symbols = args.symbols or []
+    if getattr(args, "csv_file", None):
+        symbols += load_symbols_from_csv(args.csv_file)
+
     backfill_config = BackfillConfig(
-        symbols=args.symbols or [],
+        symbols=symbols,
         period=args.period,
         interval=args.interval,
         csv_file=getattr(args, "csv_file", None),
@@ -150,6 +158,31 @@ async def mock_server(args):
         await server.start()
     except KeyboardInterrupt:
         await server.stop()
+
+
+def load_symbols_from_csv(csv_path: str) -> list[str]:
+    """Load a symbol column from a CSV file and return list of symbols.
+
+    Parameters
+    ----------
+    csv_path: str
+        Path to CSV file with a 'symbol' column.
+
+    Returns
+    -------
+    list[str]
+        List of symbols read from the CSV.
+    """
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(csv_path)
+    symbols = []
+    with open(csv_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            symbol = row.get('symbol')
+            if symbol:
+                symbols.append(symbol.strip())
+    return symbols
 
 async def auto_refresh(args):
     """

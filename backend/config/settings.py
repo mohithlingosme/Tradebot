@@ -2,17 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Sequence
 
-try:
-    # Prefer pydantic v1-style import
-    from pydantic import BaseSettings  # type: ignore
-except Exception:  # pragma: no cover - executed under Pydantic v2
-    try:
-        from pydantic_settings import BaseSettings  # type: ignore
-    except Exception:
-        # Fallback to BaseModel to keep runtime working in minimal environments
-        from pydantic import BaseModel as BaseSettings  # type: ignore
-
-from pydantic import Field, validator
+from pydantic import Field, ConfigDict
+from pydantic.functional_validators import field_validator
+from pydantic_settings import BaseSettings
 
 DEFAULT_ORIGINS = ["http://localhost:8501", "http://localhost:5173", "http://localhost:3000"]
 DEFAULT_NEWS_SOURCES = [
@@ -90,18 +82,15 @@ class BackendSettings(BaseSettings):
     news_scheduler_enabled: bool = Field(True, env="NEWS_SCHEDULER_ENABLED")
     news_sources: List[Dict[str, Any]] = Field(DEFAULT_NEWS_SOURCES, env="NEWS_SOURCES")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="allow")
 
-    @validator("allow_origins", pre=True)
+    @field_validator("allow_origins", mode="before")
     def _parse_allow_origins(cls, value: Sequence[str] | str) -> List[str]:
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return list(value)
 
-    @validator("default_symbols", pre=True)
+    @field_validator("default_symbols", mode="before")
     def _parse_default_symbols(cls, value: Sequence[str] | str) -> List[str]:
         if isinstance(value, str):
             return [symbol.strip() for symbol in value.split(",") if symbol.strip()]

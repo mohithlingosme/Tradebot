@@ -81,7 +81,9 @@ class StructuredLogger:
         """Setup logging handlers and formatters"""
         # Create logs directory
         import os
-        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
+        log_dir = os.path.dirname(self.log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
 
         # Create logger
         self.logger = logging.getLogger('finbot')

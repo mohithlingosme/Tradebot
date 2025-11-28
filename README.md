@@ -36,19 +36,26 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 ```
 
 ## Tech Stack
-- **Language**: Python 3.11+, Pydantic 2, FastAPI, SQLModel, SQLAlchemy
+- **Language**: Python 3.11.9 (CI verified), Pydantic 2, FastAPI, SQLModel, SQLAlchemy
 - **Data & ML**: pandas, numpy, scikit-learn, ta-lib, AlphalVantage, yfinance
 - **Infra**: Docker, docker-compose, PostgreSQL, Redis, Prometheus, Sentry
 - **Dev tooling**: pytest, black, ruff, mypy, isort, pre-commit
 - **Frontend**: Vite/Tauri (React + Rust)
 
+### CI/Tooling Versions
+- CI runs on Python **3.11.9** with `pip check` and safety audit enabled.
+- Frontend CI pins Node.js **18.x** (npm **9.x**).
+- YAML linting (`yamllint`) runs on all workflow files and `docker-compose.yml` if present.
+
 ## Getting Started (Local)
+> Prereqs: Python **3.11.9**, Node.js **18.x** (npm **9.x** bundled), Git, and Docker (for optional TA-Lib/compose workflows).
+
 ```bash
 git clone <repo-url>
 cd blackboxai-finbot
 
-# 1. Create a Python 3.12 virtualenv and install deps
-py -3.12 -m venv .venv      # Windows (or: python3.12 -m venv .venv)
+# 1. Create a Python 3.11 virtualenv and install deps
+py -3.11 -m venv .venv      # Windows (or: python3.11 -m venv .venv)
 .venv\Scripts\activate      # Windows (or: source .venv/bin/activate)
 pip install --upgrade pip
 pip install -r requirements.txt
@@ -80,13 +87,17 @@ python -m scripts.dev_run engine
 - Core only (API + DB/auth/logging): `scripts\\install_core.bat` (uses `requirements-core.txt`).
 - Trading stack (core + data providers/analytics): `scripts\\install_trading.bat`.
 - Full stack (core + trading + indicators): `scripts\\install_full.bat` or `pip install -r requirements.txt`.
-- TA-Lib is optional; `pandas-ta` installs by default and works on Windows. Use WSL2/Docker if you need native TA-Lib.
+- TA-Lib is optional. For local Windows, prefer the pure-Python `ta` indicators shipped in `requirements-indicators.txt`. If you need native TA-Lib, use Docker/WSL2:
+  - Docker: `docker compose -f infrastructure/docker-compose.yml up --build` (ships TA-Lib in images).
+  - WSL2: install `libta-lib0` / `libta-lib-dev` (Debian/Ubuntu) then `pip install ta-lib`.
+  - Otherwise skip TA-Lib; the indicator layer still works via `ta`.
 
 ## Environment Modes
 - Templates: `.env.dev`, `.env.paper`, `.env.live` (copy to `.env` or pass with `uvicorn --env-file`).
 - Modes: `dev` = safe sandbox/mock data; `paper` = broker sandbox/paper trading; `live` = real brokers (requires `FINBOT_LIVE_TRADING_CONFIRM=true`).
 - Example: `uvicorn backend.app.main:app --reload --env-file .env.dev`
 - Live broker calls are blocked unless `FINBOT_MODE=live` **and** `FINBOT_LIVE_TRADING_CONFIRM=true`.
+- HTTPS redirection is **disabled by default** for local dev to avoid browser `ERR_NETWORK` on login; set `ENFORCE_HTTPS=1` when running behind TLS/ingress in staging or production.
 
 ## Architecture
 Finbot stitches the frontend, backend, ingestion pipeline, trading engine, AI models, and data collector components together in one stack. View the architecture diagram in [`docs/architecture.md`](docs/architecture.md) for the full Mermaid graph and details.

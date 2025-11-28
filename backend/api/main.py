@@ -152,6 +152,7 @@ app = FastAPI(
 )
 
 # Import core services
+cache_manager = None
 try:
     from ..core import RateLimitMiddleware, cache_manager
     # Add rate limiting middleware
@@ -626,13 +627,13 @@ async def get_logs(
         log_file_path = getattr(settings, 'log_file', None)
         if not log_file_path:
             if mvp_engine:
-                return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp"}
+                return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp", "message": "No log file found"}
             return {"logs": [], "total_lines": 0, "message": "Log file configuration missing"}
 
         log_file = Path(log_file_path)
         if not log_file.exists():
             if mvp_engine:
-                return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp"}
+                return {"logs": mvp_engine.logs, "total_lines": len(mvp_engine.logs), "source": "mvp", "message": "No log file found"}
             return {"logs": [], "total_lines": 0, "message": "No log file found"}
 
         requested_level = level.upper() if level else None
@@ -649,7 +650,8 @@ async def get_logs(
             all_lines = log_file.read_text(encoding="utf-8").splitlines()
         except OSError as exc:
             logger.error(f"Unable to read log file {log_file}: {exc}")
-            raise HTTPException(status_code=500, detail="Unable to read log file")
+            # Log store (file) is present but unreadable; surface as service unavailable
+            raise HTTPException(status_code=503, detail="Log store unavailable")
 
         log_entries: List[LogEntry] = []
         line_pattern = re.compile(
@@ -1086,6 +1088,18 @@ async def get_metrics():
         },
         "dependencies": {
             "cache": cache_health
+        },
+        "trading": {
+            "uptime_seconds": uptime_seconds,
+            "trade_stream": {
+                "subscribers": await trade_stream_manager.count_subscribers()
+            }
+        },
+        "system": {
+            "logger_metrics": telemetry,
+            "dependencies": {
+                "cache": cache_health
+            }
         }
     }
     return metrics
@@ -1144,7 +1158,7 @@ async def api_logs(
     limit: int = Query(100, ge=1, le=500),
     since: Optional[datetime] = Query(None),
     until: Optional[datetime] = Query(None),
-    current_admin: Dict = Depends(get_current_active_user),
+    current_admin: Dict = Depends(get_current_admin_user),
 ):
     return await get_logs(level=level, limit=limit, since=since, until=until, current_admin=current_admin)
 

@@ -1,7 +1,7 @@
 # Finbot trading/data stack builds on the core API layer
 -r requirements-core.txt
 
-# Data processing & analytics (Python 3.12 compatible)
+# Data processing & analytics (Python 3.11.9 compatible)
 numpy>=1.26,<2.0
 pandas>=2.2,<2.3
 scikit-learn>=1.4,<1.5

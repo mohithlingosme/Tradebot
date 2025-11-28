@@ -1,18 +1,18 @@
-# Environment Setup (Python 3.12)
+# Environment Setup (Python 3.11.9)
 
-Finbot now targets Python 3.12. Trading/analytics libraries (numpy, pandas, pandas-ta, scikit-learn) are pinned to 3.12-compatible versions. Follow these steps on Windows/macOS/Linux.
+Finbot now targets Python 3.11.9. Trading/analytics libraries (numpy, pandas, pandas-ta, scikit-learn) are pinned to 3.11-compatible versions. Follow these steps on Windows/macOS/Linux.
 
-## 1) Install Python 3.10
-- Download from https://www.python.org/downloads/release/python-3120/ (Windows: check “Add Python to PATH”).
+## 1) Install Python 3.11.9
+- Download from https://www.python.org/downloads/release/python-3119/ (Windows: check “Add Python to PATH”).
 
 ## 2) Create and activate a virtual environment
 ```bash
-# Windows
-py -3.12 -m venv .venv
+. # Windows
+py -3.11 -m venv .venv
 .venv\Scripts\activate
 
 # macOS / Linux
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -21,7 +21,7 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
-The dependency stack is split across layered requirement files; `requirements.txt` includes them all. `pandas-ta` is pinned to a PyPI-available version range compatible with Python 3.10.
+The dependency stack is split across layered requirement files; `requirements.txt` includes them all. `pandas-ta` is pinned to a PyPI-available version range compatible with Python 3.11.
 
 ## 4) Verify imports
 ```bash
@@ -37,13 +37,13 @@ PY
 
 ## 5) Troubleshooting
 - If a system build tool error occurs (e.g., TA-Lib), stay on `pandas-ta` only or install TA-Lib via WSL2/Docker. TA-Lib is optional in `requirements-indicators.txt`.
-- Ensure you are using Python 3.12; mismatched interpreters can cause “requires a different python version” errors.
+-- Ensure you are using Python 3.11.9; mismatched interpreters can cause “requires a different python version” errors.
 
 ## 6) Clean reinstall (fresh setup)
 ```bash
 deactivate  # if active
 rm -rf .venv
-python3.12 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate    # or .venv\Scripts\activate on Windows
 pip install --upgrade pip
 pip install -r requirements.txt

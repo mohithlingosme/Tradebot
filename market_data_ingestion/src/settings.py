@@ -5,7 +5,9 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal
 
-from pydantic import BaseSettings, Field, validator
+from pydantic import Field, ConfigDict
+from pydantic.functional_validators import field_validator
+from pydantic_settings import BaseSettings
 
 DEFAULT_PROVIDER_CONFIGS = {
     "yfinance": {"is_active": True, "rate_limit_per_minute": 100},
@@ -79,12 +81,9 @@ class MarketDataSettings(BaseSettings):
     scheduler_symbols: List[str] | None = Field(None, env="MARKET_DATA_SCHEDULER_SYMBOLS")
     scheduler_enabled: bool = Field(True, env="MARKET_DATA_SCHEDULER_ENABLED")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore")
 
-    @validator("scheduler_symbols", pre=True)
+    @field_validator("scheduler_symbols", mode="before")
     def _parse_scheduler_symbols(cls, value):
         if isinstance(value, str):
             return [symbol.strip() for symbol in value.split(",") if symbol.strip()]

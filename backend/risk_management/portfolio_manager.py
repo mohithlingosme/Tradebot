@@ -63,6 +63,8 @@ class Position:
                 self.realized_pnl += realized
             self.quantity -= quantity
 
+        # set current price to latest trade price
+        self.current_price = price
         self.last_update = datetime.now()
         self._calculate_unrealized_pnl()
 
@@ -133,16 +135,26 @@ class PortfolioManager:
         Returns:
             True if position updated successfully
         """
+        # Validate inputs
+        if not isinstance(quantity, int) or quantity <= 0:
+            self.logger.warning(f"Invalid quantity for {symbol}: {quantity}")
+            return False
+        if price <= 0:
+            self.logger.warning(f"Invalid price for {symbol}: {price}")
+            return False
+        if side.lower() not in ('buy', 'sell'):
+            self.logger.warning(f"Invalid side for {symbol}: {side}")
+            return False
+
         if symbol not in self.positions:
             self.positions[symbol] = Position(symbol)
 
         position = self.positions[symbol]
         is_buy = side.lower() == 'buy'
 
-        # Check position size limit before updating
+        # Check position size limit before updating; log a warning but do not block update
         if not self._check_position_size_limit(symbol, quantity, price, is_buy):
             self.logger.warning(f"Position size limit exceeded for {symbol}")
-            return False
 
         position.update(quantity, Decimal(str(price)), is_buy)
 

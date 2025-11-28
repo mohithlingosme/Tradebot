@@ -1,5 +1,5 @@
 # Multi-stage build for smaller image size
-FROM python:3.11-slim-buster AS builder
+FROM python:3.11.9-slim-buster AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Production stage
-FROM python:3.11-slim-buster
+FROM python:3.11.9-slim-buster
 
 WORKDIR /app
 

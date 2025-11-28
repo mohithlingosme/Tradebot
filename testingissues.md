@@ -54,7 +54,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 ## 3. Missing Dependencies
 
 **Required (by tests):**
-- Python 3.12+
+- Python 3.11.9+
 - Packages in `requirements.txt`, `requirements-core.txt`, `requirements-indicators.txt` (key: fastapi, uvicorn, pydantic, pandas, numpy, scikit-learn, pytest, yfinance, alpha-vantage, aiohttp, httpx, sqlalchemy, sqlmodel)
 - **TA-Lib:** Optional, but installation issues on Windows are a recurring problem ([docs/env_setup.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/env_setup.md#troubleshooting))
 - Cypress: listed as TODO for frontend E2E (verify installation)
@@ -63,7 +63,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 
 **Version Specifications/Conflicts:**
 - Some versions are pinned (e.g., fastapi~=0.104, uvicorn~=0.24, pandas-ta-classic, pydantic~=2.5)
-- Notes on interpreter mismatch errors: Ensure Python 3.12 is used everywhere ([docs/env_setup.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/env_setup.md#troubleshooting))
+-- Notes on interpreter mismatch errors: Ensure Python 3.11.9 is used everywhere ([docs/env_setup.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/env_setup.md#troubleshooting))
 
 **Recommendations:**
 - Always use provided requirements files for installs. Use Docker where possible to avoid OS-level issues.
@@ -77,6 +77,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 **Documented in (test files and integration logs):**
 - API log endpoints:
   - Test failure: API returns 500 when log store unavailable.
+   - Test failure: API returns 500 when log store unavailable. (Fixed — now returns 503 Service Unavailable)
     ```python
     response = client.get("/api/logs")
     assert response.status_code == 500
@@ -102,7 +103,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 **Observed:**
 - Pinning required for critical libraries (see `requirements.txt`) to avoid interpreter conflicts.
 - TA-Lib python bindings version-mismatch issues, especially on Windows; fallback to pandas-ta advised.
-- "Python 3.12 required" throughout documentation; issues if using 3.11/3.10 ([docs/env_setup.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/env_setup.md#troubleshooting))
+-- "Python 3.11.9 required" throughout documentation; issues if using other minor versions ([docs/env_setup.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/env_setup.md#troubleshooting))
 - Node/npm for frontend, but no pinning seen; risk for frontend CI/CD.
 
 **Recommendations:**
@@ -132,7 +133,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
         - name: Install Python
           uses: actions/setup-python@v4
           with:
-            python-version: '3.12'
+            python-version: '3.11.9'
         - name: Install dependencies
           run: pip install -r requirements.txt
         - name: Run tests
@@ -178,7 +179,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 | Issues                   | Dependency/env/test glue complexity        | fundamental_issues.md, env_setup.md            | Use Docker + document env   |
 | Missing Dependencies     | TA-Lib optional, pandas-ta fallback        | requirements-indicators.txt, env_setup.md      | Use Docker or fallback      |
 | Failing Tests            | Log endpoint, mock/fixture edge cases      | test_api_auth.py, test_trading_engine.py       | Add robust edge coverage    |
-| Version Issues           | Python 3.12 pinning, node js risk          | README.md, requirements.txt                    | Pin versions in CI          |
+| Version Issues           | Python 3.11.9 pinning, node js risk          | README.md, requirements.txt                    | Pin versions in CI          |
 | Workflow Syntax Issues   | .github/workflows/ci.yml TODO              | project_status.md                              | Enable YAML lint in CI      |
 | Workflow Path Issues     | .env.example missing, resource path errors | project_status.md, config.py                   | Add example env + abs paths |
 | Pipeline Failures        | CI fast-fail on environment error          | project_status.md, safety_audit.py             | Pre-flight checks + audit   |

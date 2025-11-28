@@ -56,7 +56,9 @@ async def get_logs(
         )
     except LogAccessError as err:
         logger.error("Failed to retrieve logs: %s", err)
-        raise HTTPException(status_code=500, detail="Unable to access log store")
+        # When the log store (file/aggregator) is inaccessible, return 503 Service Unavailable
+        # so callers can retry later instead of assuming an internal server bug.
+        raise HTTPException(status_code=503, detail="Log store unavailable")
 
 
 @router.get("/metrics", response_model=MetricsResponse)

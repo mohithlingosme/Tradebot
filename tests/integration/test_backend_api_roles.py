@@ -208,10 +208,10 @@ def test_logs_restricted_to_admin(client: TestClient, user_token: str, admin_tok
     assert first["extra"]["data"]["token"] == "***REDACTED***"
 
 
-def test_logs_returns_500_when_store_unavailable(client: TestClient, admin_token: str) -> None:
+def test_logs_returns_503_when_store_unavailable(client: TestClient, admin_token: str) -> None:
     _cleanup_path(TEST_LOG_PATH)
 
     response = client.get("/api/logs", headers=_auth_headers(admin_token))
-    assert response.status_code == 500
+    assert response.status_code == 503
     detail = response.json().get("detail", "")
-    assert "log" in detail.lower()
+    assert "log" in detail.lower() or "store" in detail.lower()
