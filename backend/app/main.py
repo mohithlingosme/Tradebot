@@ -1,4 +1,5 @@
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
@@ -54,7 +55,17 @@ configure_logging()
 logger = logging.getLogger(__name__)
 logger.info("Backend logging initialized (mode=%s)", settings.finbot_mode)
 
-app = FastAPI(title=settings.app_name, version="1.1.0")
+# Lifespan context manager to replace deprecated on_event handlers
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup operations
+    create_db_and_tables()
+    logger.info("Database initialized (mode=%s)", settings.finbot_mode)
+    yield
+    # Shutdown operations: nothing specific yet, but this is the place
+    logger.info("Backend app shutting down")
+
+app = FastAPI(title=settings.app_name, version="1.1.0", lifespan=lifespan)
 # Run with: uvicorn backend.app.main:app --reload
 
 configure_sentry()
@@ -96,11 +107,7 @@ app.include_router(strategy.router)
 market_data: Dict[str, Dict] = {}
 connected_clients: List[WebSocket] = []
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup."""
-    create_db_and_tables()
-    logger.info("Database initialized (mode=%s)", settings.finbot_mode)
+
 
 @app.get("/health")
 async def health_check():

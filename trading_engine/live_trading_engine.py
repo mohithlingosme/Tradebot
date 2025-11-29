@@ -25,8 +25,23 @@ from enum import Enum
 import uuid
 
 from .strategy_manager import StrategyManager, BaseStrategy
-from risk_management.portfolio_manager import PortfolioManager
-from monitoring.logger import StructuredLogger, LogLevel, Component
+try:
+    from risk_management.portfolio_manager import PortfolioManager
+except ModuleNotFoundError:  # pragma: no cover - import path compatibility shim
+    try:
+        from backend.risk_management.portfolio_manager import PortfolioManager
+    except ModuleNotFoundError:
+        PortfolioManager = None
+
+try:
+    from monitoring.logger import StructuredLogger, LogLevel, Component
+except ModuleNotFoundError:  # pragma: no cover - import path compatibility shim
+    try:
+        from backend.monitoring.logger import StructuredLogger, LogLevel, Component
+    except ModuleNotFoundError:
+        StructuredLogger = None
+        LogLevel = None
+        Component = None
 from execution.base_broker import BaseBroker, Order as BrokerOrder, OrderSide, OrderStatus, OrderType
 from execution.mocked_broker import MockedBroker
 from risk.risk_manager import AccountState, OrderRequest, RiskLimits, RiskManager

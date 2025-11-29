@@ -16,7 +16,13 @@ import json
 import os
 
 from .strategy_manager import StrategyManager, BaseStrategy
-from risk_management.portfolio_manager import PortfolioManager
+try:
+    from risk_management.portfolio_manager import PortfolioManager
+except ModuleNotFoundError:  # pragma: no cover - import path compatibility shim
+    try:
+        from backend.risk_management.portfolio_manager import PortfolioManager
+    except ModuleNotFoundError:
+        PortfolioManager = None
 
 logger = logging.getLogger(__name__)
 

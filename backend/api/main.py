@@ -32,6 +32,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
@@ -142,6 +143,24 @@ def ensure_live_trading_allowed(operation: str) -> None:
             ),
         )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: start news scheduler and mvp_engine where appropriate
+    if NEWS_AVAILABLE and news_router is not None:
+        scheduler = get_news_scheduler()
+        if scheduler:
+            scheduler.start()
+    if mvp_engine and settings.finbot_mode != "live":
+        await mvp_engine.start()
+    yield
+    # Shutdown: stop mvp_engine and stop news scheduler
+    if mvp_engine and getattr(mvp_engine, "running", False):
+        await mvp_engine.stop()
+    if NEWS_AVAILABLE and news_router is not None:
+        scheduler = get_news_scheduler()
+        if scheduler:
+            await scheduler.stop()
+
 app = FastAPI(
     title="Finbot Trading API",
     description="API for Finbot autonomous trading system",
@@ -149,6 +168,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json"
+    , lifespan=lifespan
 )
 
 # Import core services
@@ -359,19 +379,6 @@ if MARKET_DATA_AVAILABLE:
 
 if NEWS_AVAILABLE and news_router is not None:
     app.include_router(news_router)
-
-    async def start_news_scheduler():
-        scheduler = get_news_scheduler()
-        if scheduler:
-            scheduler.start()
-
-    async def stop_news_scheduler():
-        scheduler = get_news_scheduler()
-        if scheduler:
-            await scheduler.stop()
-
-    app.add_event_handler("startup", start_news_scheduler)
-    app.add_event_handler("shutdown", stop_news_scheduler)
 
 # Include AI router
 try:
@@ -821,128 +828,10 @@ async def websocket_dashboard(websocket: WebSocket):
         await mvp_engine.unsubscribe(subscriber)
         await websocket.close()
 
-# Authentication endpoints
-@app.post("/auth/login", response_model=TokenResponse)
-async def login(credentials: UserCredentials):
-    """
-    Authenticate user and return JWT token.
-
-    Args:
-        credentials: User login credentials
-
-    Returns:
-        JWT access token
-    """
-    user = authenticate_user(credentials.username, credentials.password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    access_token = create_access_token(data={"sub": user.username, "role": getattr(user, "role", "user")})
-    return TokenResponse(access_token=access_token, expires_in=1800)
-
-@app.post("/auth/logout")
-async def logout(current_user: Dict = Depends(get_current_active_user)):
-    """
-    Logout user (invalidate token on client side).
-
-    Returns:
-        Logout confirmation
-    """
-    # In a stateless JWT system, logout is handled client-side by discarding the token
-    # For server-side token invalidation, implement token blacklisting
-    return {"message": "Logged out successfully"}
-
-class RegisterRequest(BaseModel):
-    """User registration request model."""
-    username: str
-    email: str
-    password: str
-
-@app.post("/auth/register", response_model=TokenResponse)
-async def register(request: RegisterRequest):
-    """
-    Register a new user.
-
-    Args:
-        request: Registration details
-
-    Returns:
-        JWT access token
-    """
-    from .auth import USER_DATABASE, pwd_context
-    
-    # Check if user already exists
-    if request.username in USER_DATABASE:
-        raise HTTPException(status_code=400, detail="Username already exists")
-    
-    # Validate email format
-    import re
-    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    if not re.match(email_pattern, request.email):
-        raise HTTPException(status_code=400, detail="Invalid email format")
-    
-    # Validate password strength
-    if len(request.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
-    
-    # Create new user
-    hashed_password = pwd_context.hash(request.password)
-    USER_DATABASE[request.username] = {
-        "username": request.username,
-        "email": request.email,
-        "hashed_password": hashed_password,
-        "role": "user",
-    }
-    
-    # Create token
-    access_token = create_access_token(data={"sub": request.username, "role": "user"})
-    logger.info(f"New user registered: {request.username}")
-    
-    return TokenResponse(access_token=access_token, expires_in=1800)
-
-class ForgotPasswordRequest(BaseModel):
-    """Forgot password request model."""
-    email: str
-
-@app.post("/auth/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest):
-    """
-    Request password reset.
-
-    Args:
-        request: Email address
-
-    Returns:
-        Confirmation message
-    """
-    from .auth import USER_DATABASE
-    
-    # Find user by email
-    user = None
-    for username, user_data in USER_DATABASE.items():
-        if user_data.get("email") == request.email:
-            user = username
-            break
-    
-    # Always return success message (security best practice - don't reveal if email exists)
-    # In production, send actual password reset email
-    logger.info(f"Password reset requested for email: {request.email}")
-    
-    return {
-        "message": "If an account exists with this email, you will receive password reset instructions."
-    }
+# Authentication endpoints moved to api_router below
 
 
-@app.on_event("startup")
-async def start_mvp_loop():
-    if mvp_engine and settings.finbot_mode != "live":
-        await mvp_engine.start()
-
-
-@app.on_event("shutdown")
-async def stop_mvp_loop():
-    if mvp_engine and mvp_engine.running:
-        await mvp_engine.stop()
+# mvp_engine startup/shutdown and news scheduler lifecycle handled by lifespan
 
 # Trade execution model
 class TradeRequest(BaseModel):
@@ -1167,6 +1056,116 @@ async def api_logs(
 async def api_ws_dashboard(websocket: WebSocket):
     await websocket_dashboard(websocket)
 
+# Authentication endpoints
+@api_router.post("/auth/login", response_model=TokenResponse)
+async def api_login(credentials: UserCredentials):
+    """
+    Authenticate user and return JWT token.
+
+    Args:
+        credentials: User login credentials
+
+    Returns:
+        JWT access token
+    """
+    user = authenticate_user(credentials.username, credentials.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    access_token = create_access_token(data={"sub": user.username, "role": getattr(user, "role", "user")})
+    return TokenResponse(access_token=access_token, expires_in=1800)
+
+@api_router.post("/auth/logout")
+async def api_logout(current_user: Dict = Depends(get_current_active_user)):
+    """
+    Logout user (invalidate token on client side).
+
+    Returns:
+        Logout confirmation
+    """
+    # In a stateless JWT system, logout is handled client-side by discarding the token
+    # For server-side token invalidation, implement token blacklisting
+    return {"message": "Logged out successfully"}
+
+class RegisterRequest(BaseModel):
+    """User registration request model."""
+    username: str
+    email: str
+    password: str
+
+@api_router.post("/auth/register", response_model=TokenResponse)
+async def api_register(request: RegisterRequest):
+    """
+    Register a new user.
+
+    Args:
+        request: Registration details
+
+    Returns:
+        JWT access token
+    """
+    from .auth import USER_DATABASE, pwd_context
+
+    # Check if user already exists
+    if request.username in USER_DATABASE:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    # Validate email format
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, request.email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+
+    # Validate password strength
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+
+    # Create new user
+    hashed_password = pwd_context.hash(request.password)
+    USER_DATABASE[request.username] = {
+        "username": request.username,
+        "email": request.email,
+        "hashed_password": hashed_password,
+        "role": "user",
+    }
+
+    # Create token
+    access_token = create_access_token(data={"sub": request.username, "role": "user"})
+    logger.info(f"New user registered: {request.username}")
+
+    return TokenResponse(access_token=access_token, expires_in=1800)
+
+class ForgotPasswordRequest(BaseModel):
+    """Forgot password request model."""
+    email: str
+
+@api_router.post("/auth/forgot-password")
+async def api_forgot_password(request: ForgotPasswordRequest):
+    """
+    Request password reset.
+
+    Args:
+        request: Email address
+
+    Returns:
+        Confirmation message
+    """
+    from .auth import USER_DATABASE
+
+    # Find user by email
+    user = None
+    for username, user_data in USER_DATABASE.items():
+        if user_data.get("email") == request.email:
+            user = username
+            break
+
+    # Always return success message (security best practice - don't reveal if email exists)
+    # In production, send actual password reset email
+    logger.info(f"Password reset requested for email: {request.email}")
+
+    return {
+        "message": "If an account exists with this email, you will receive password reset instructions."
+    }
 
 app.include_router(api_router)
 

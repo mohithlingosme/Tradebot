@@ -1,6 +1,8 @@
 from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import uvicorn
+from contextlib import asynccontextmanager
 from market_data_ingestion.core.storage import DataStorage
 from market_data_ingestion.src.logging_config import setup_logging, get_logger
 from market_data_ingestion.src.metrics import metrics_collector
@@ -10,23 +12,31 @@ from market_data_ingestion.src.settings import settings
 setup_logging()
 logger = get_logger(__name__)
 
-app = FastAPI(title="Market Data API", version="1.0.0")
-
 # Initialize storage
 storage = DataStorage(settings.database_url)
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database connection on startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI app."""
+    # Startup
     await storage.connect()
     await storage.create_tables()
     logger.info("Market Data API started (mode=%s)", settings.finbot_mode)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connection on shutdown."""
+    yield
+    # Shutdown
     await storage.disconnect()
     logger.info("Market Data API stopped")
+
+app = FastAPI(title="Market Data API", version="1.0.0", lifespan=lifespan)
+
+# CORS settings — allow common local dev frontends
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8501", "http://localhost:5173", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 async def health_check():
@@ -107,6 +117,6 @@ async def get_available_symbols():
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=settings.api_port)
     args = parser.parse_args()
     uvicorn.run(app, host="0.0.0.0", port=args.port)
