@@ -1,6 +1,8 @@
 """Authentication request/response schemas."""
 
-from pydantic import BaseModel, Field
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -12,3 +14,14 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = Field(default="bearer")
     expires_in: int
+
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    full_name: str | None = None
+
+
+class RegisterResponse(BaseModel):
+    message: str

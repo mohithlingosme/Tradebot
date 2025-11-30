@@ -9,7 +9,7 @@ from ..config import settings
 from ..core.dependencies import get_current_active_user
 from ..core.security import create_access_token
 from ..database import get_session
-from ..schemas.auth import LoginRequest, TokenResponse
+from ..schemas.auth import LoginRequest, RegisterRequest, RegisterResponse, TokenResponse
 from ..schemas.user import UserPublic
 from ..services.user_service import user_service
 
@@ -41,6 +41,24 @@ async def login(payload: LoginRequest, session: Session = Depends(get_session)):
         access_token=access_token,
         expires_in=int(expires_delta.total_seconds()),
     )
+
+
+@router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
+async def register_user(payload: RegisterRequest, session: Session = Depends(get_session)):
+    # Check if user already exists
+    existing_user = user_service.get_user_by_username(session, payload.username)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User with this username already exists",
+        )
+    # Create the user
+    user = user_service.create_user(
+        session, payload.username, payload.password, email=payload.email
+    )
+    session.commit()
+    print(f"[AUTH] Registered user: {payload.username} ({payload.email})")
+    return RegisterResponse(message="User registered successfully!")
 
 
 @router.post("/logout")

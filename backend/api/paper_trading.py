@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from .auth import get_current_active_user
-from ..trading_engine.paper_trading import get_paper_trading_engine, PaperTradingEngine
+from trading_engine.paper_trading import get_paper_trading_engine, PaperTradingEngine
 
 logger = logging.getLogger(__name__)
 

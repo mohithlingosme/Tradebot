@@ -1,8 +1,18 @@
-# TODO: Fix 404 Error for /api/auth/register
+# TODO: Add Auth Router and Frontend Integration
 
-- [ ] Update auth endpoint paths in backend/api/main.py to include /api prefix
-- [x] Change /auth/login to /api/auth/login
-- [x] Change /auth/logout to /api/auth/logout
-- [x] Change /auth/register to /api/auth/register
-- [x] Change /auth/forgot-password to /api/auth/forgot-password
-- [ ] Test the updated endpoints
+## Backend Changes
+- [x] Edit `backend/app/schemas/auth.py`: Add RegisterRequest and RegisterResponse models, import EmailStr.
+- [x] Edit `backend/app/routers/auth.py`: Change prefix to "/auth", add register endpoint with RegisterRequest/RegisterResponse.
+
+## Frontend Changes
+- [x] Edit `frontend/src/services/auth.ts`: Update registerRequest payload to {email, password, full_name}, response to {message}.
+- [x] Edit `frontend/vite.config.ts`: Add proxy for "/api" to "http://localhost:8000".
+
+## Testing
+- [x] Restart backend with uvicorn.
+- [x] Test register endpoint in Swagger.
+- [x] Test frontend register call (backend API tested successfully).
+
+## Additional Fixes
+- [x] Update register endpoint to create actual users in DB.
+- [x] Create user Mohith with provided details.

@@ -289,7 +289,9 @@ class PaperTradingEngine:
             # Update position
             if order.symbol not in self.positions:
                 self.positions[order.symbol] = PaperPosition(order.symbol)
-            self.positions[order.symbol].add_quantity(float(qty), fill_price)
+            position = self.positions[order.symbol]
+            position.add_quantity(float(qty), fill_price)
+            position.update_price(fill_price)
             
         else:  # SELL
             # Update cash
@@ -298,7 +300,9 @@ class PaperTradingEngine:
             
             # Update position
             if order.symbol in self.positions:
-                realized_pnl = self.positions[order.symbol].reduce_quantity(float(qty), fill_price)
+                position = self.positions[order.symbol]
+                realized_pnl = position.reduce_quantity(float(qty), fill_price)
+                position.update_price(fill_price)
             
         # Record trade
         self.trade_history.append({

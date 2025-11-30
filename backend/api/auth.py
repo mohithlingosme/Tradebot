@@ -58,14 +58,34 @@ class User:
             "role": self.role,
         }
 
-# Demo users (in production, use proper user database)
-DEMO_USERS = {
-    "admin": User("admin", _hash_or_fallback("admin123"), role="admin"),
-    "trader": User("trader", _hash_or_fallback("trader123"), role="user"),
-}
+# Demo users (in production, use proper user database). Allow environment overrides
+# to stay in sync with the newer backend defaults (DEFAULT_* envs).
+_default_users = [
+    (
+        os.getenv("DEFAULT_ADMIN_USERNAME", "admin"),
+        os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123"),
+        "admin",
+    ),
+    (
+        os.getenv("DEFAULT_TRADER_USERNAME", "trader"),
+        os.getenv("DEFAULT_TRADER_PASSWORD", "trader123"),
+        "user",
+    ),
+    (
+        os.getenv("DEFAULT_USER_USERNAME", "user"),
+        os.getenv("DEFAULT_USER_PASSWORD", "userpass"),
+        "user",
+    ),
+]
+
+DEMO_USERS: Dict[str, User] = {}
+for username, password, role in _default_users:
+    if not username or not password:
+        continue
+    DEMO_USERS[username] = User(username, _hash_or_fallback(password), role=role)
 
 # User storage (in production, use database)
-USER_DATABASE = {
+USER_DATABASE: Dict[str, Dict[str, str]] = {
     username: {**user.dict(), "email": f"{username}@finbot.com"}
     for username, user in DEMO_USERS.items()
 }
@@ -83,10 +103,15 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def authenticate_user(username: str, password: str) -> Optional[User]:
     """Authenticate a user with username and password."""
-    user = DEMO_USERS.get(username)
-    if not user or not verify_password(password, user.hashed_password):
+    user_record = USER_DATABASE.get(username)
+    if not user_record:
         return None
-    return user
+    hashed_password = user_record.get("hashed_password")
+    role = user_record.get("role", "user")
+    if not hashed_password or not verify_password(password, hashed_password):
+        return None
+    # Return a lightweight User instance for downstream compatibility
+    return User(username=user_record["username"], hashed_password=hashed_password, role=role)
 
 def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""

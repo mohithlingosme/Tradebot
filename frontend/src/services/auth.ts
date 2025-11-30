@@ -10,6 +10,10 @@ export interface AuthResponse {
   }
 }
 
+export interface RegisterResponse {
+  message: string
+}
+
 const authClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -23,10 +27,10 @@ export const loginRequest = async (payload: { username: string; password: string
 }
 
 export const registerRequest = async (payload: {
-  username: string
   email: string
   password: string
+  full_name?: string
 }) => {
-  const { data } = await authClient.post<AuthResponse>(withApiPrefix('/auth/register'), payload)
+  const { data } = await authClient.post<RegisterResponse>(withApiPrefix('/auth/register'), payload)
   return data
 }

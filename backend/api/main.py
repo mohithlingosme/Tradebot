@@ -184,7 +184,7 @@ except ImportError:
 # CORS middleware for frontend access
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8501", "http://localhost:5173", "http://localhost:3000"],  # Streamlit, Vite, React
+    allow_origins=["http://localhost:8501", "http://localhost:5173", "http://localhost:3000", "http://localhost:1420"],  # Streamlit, Vite, React, Vite dev
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1166,6 +1166,11 @@ async def api_forgot_password(request: ForgotPasswordRequest):
     return {
         "message": "If an account exists with this email, you will receive password reset instructions."
     }
+
+# Backwards-compatible aliases without the /api prefix so older clients/tests continue to work.
+app.add_api_route("/auth/login", api_login, methods=["POST"], response_model=TokenResponse, tags=["auth"])
+app.add_api_route("/auth/logout", api_logout, methods=["POST"], tags=["auth"])
+app.add_api_route("/auth/register", api_register, methods=["POST"], response_model=TokenResponse, tags=["auth"])
 
 app.include_router(api_router)
 
