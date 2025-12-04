@@ -113,6 +113,9 @@ async def get_candles(
             "count": len(candles),
             "data": candles
         }
+    except HTTPException:
+        # Re-raise HTTPExceptions (like our 404) without wrapping them
+        raise
     except Exception as e:
         logger.error(f"Error fetching candles for {symbol}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

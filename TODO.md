@@ -1,18 +1,16 @@
-# TODO: Add Auth Router and Frontend Integration
+# Path and Resource Issues TODO
 
-## Backend Changes
-- [x] Edit `backend/app/schemas/auth.py`: Add RegisterRequest and RegisterResponse models, import EmailStr.
-- [x] Edit `backend/app/routers/auth.py`: Change prefix to "/auth", add register endpoint with RegisterRequest/RegisterResponse.
+## 1. Use absolute paths for test fixtures and logs
+- [ ] Review all test files for relative path usage
+- [ ] Update any test files using relative paths to use absolute paths
+- [ ] Ensure logs directory creation uses absolute paths
 
-## Frontend Changes
-- [x] Edit `frontend/src/services/auth.ts`: Update registerRequest payload to {email, password, full_name}, response to {message}.
-- [x] Edit `frontend/vite.config.ts`: Add proxy for "/api" to "http://localhost:8000".
+## 2. Fix environment variable expansion in config files
+- [ ] Verify `_expand_env_vars` implementation in market_data_ingestion/src/settings.py
+- [ ] Check other config files for consistent environment variable handling
+- [ ] Ensure all config files properly expand ${VAR_NAME} patterns
 
-## Testing
-- [x] Restart backend with uvicorn.
-- [x] Test register endpoint in Swagger.
-- [x] Test frontend register call (backend API tested successfully).
-
-## Additional Fixes
-- [x] Update register endpoint to create actual users in DB.
-- [x] Create user Mohith with provided details.
+## 3. Document expected environment variables in CONTRIBUTING.md
+- [ ] Collect all environment variables used across the codebase
+- [ ] Add comprehensive environment variables section to CONTRIBUTING.md
+- [ ] Include descriptions, defaults, and usage examples

@@ -224,3 +224,15 @@ node_modules/
 .DS_Store
 *.bak
 *.swp
+
+# Additional unwanted files
+finbot_db.db
+market_data.db
+tmp_import_check.py
+tmp_import_check2.py
+indicator.txt
+indicators_files.txt
+indicators_py_files.txt
+prompt.txt
+postman_collection.json
+push_all_branches.sh

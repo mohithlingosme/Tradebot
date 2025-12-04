@@ -13,7 +13,7 @@ from ..schemas.auth import LoginRequest, RegisterRequest, RegisterResponse, Toke
 from ..schemas.user import UserPublic
 from ..services.user_service import user_service
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=TokenResponse)
