@@ -9,6 +9,8 @@ from functools import lru_cache
 from typing import Dict, List, Literal, Sequence
 from pydantic import Field
 
+from common.env import expand_env_vars
+
 try:  # Prefer pydantic-settings if present
     from pydantic_settings import BaseSettings  # type: ignore
 except Exception:  # pragma: no cover - fallback for environments without pydantic-settings
@@ -102,6 +104,21 @@ class DataCollectorSettings(BaseSettings):
         env_file = ".env"
         env_prefix = "DATA_COLLECTOR_"
         case_sensitive = False
+
+    def __init__(self, **data):  # type: ignore[override]
+        super().__init__(**data)
+        self._apply_env_expansion()
+
+    def _apply_env_expansion(self) -> None:
+        field_names = []
+        if hasattr(self, "model_fields"):
+            field_names = list(self.model_fields.keys())  # type: ignore[attr-defined]
+        elif hasattr(self, "__fields__"):
+            field_names = list(self.__fields__.keys())  # type: ignore[attr-defined]
+
+        for name in field_names:
+            value = getattr(self, name)
+            object.__setattr__(self, name, expand_env_vars(value))
 
 
 @lru_cache(maxsize=1)

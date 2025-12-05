@@ -1,7 +1,10 @@
 import asyncio
 import argparse
+import contextlib
 import logging
 import os
+from typing import Any, Dict
+import signal
 
 from market_data_ingestion.core.storage import DataStorage
 from market_data_ingestion.adapters.yfinance import YFinanceAdapter
@@ -141,11 +144,97 @@ async def migrate(args):
 
 async def run_worker(args):
     """
-    Runs a worker process.
+    Orchestrate realtime streaming + scheduled refresh jobs.
     """
     logging.info("Running worker process")
-    # TODO: Implement worker process logic here
-    pass
+    stop_event = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop_event.set)
+    except NotImplementedError:
+        # Windows event loop may not support add_signal_handler.
+        pass
+
+    storage = DataStorage(settings.database_url)
+    await storage.connect()
+    await storage.create_tables()
+
+    aggregator = TickAggregator()
+    aggregator_task = asyncio.create_task(aggregator.run())
+    scheduler = AutoRefreshScheduler()
+    scheduler_task = asyncio.create_task(scheduler.run_forever())
+
+    async def persist_tick(provider_name: str, tick):
+        payload = tick.to_dict()
+        payload["provider"] = provider_name
+        await storage.insert_tick(payload)
+        metrics_collector.record_ingestion_request(provider_name, payload["symbol"], "success")
+        metrics_collector.record_data_points_ingested(provider_name, "ticks", 1)
+        await aggregator.aggregate_tick(
+            {
+                "symbol": payload["symbol"],
+                "ts_utc": payload["ts_utc"],
+                "price": payload["price"],
+                "qty": payload["volume"],
+            }
+        )
+
+    def symbols_for_provider(provider_name: str, provider_cfg: Dict[str, Any]) -> list[str]:
+        configured = [
+            inst["symbol"]
+            for inst in settings.instruments
+            if inst.get("provider") == provider_name and inst.get("symbol")
+        ]
+        extra = provider_cfg.get("symbols") or []
+        configured.extend(extra)
+        return sorted({symbol for symbol in configured if symbol})
+
+    stream_tasks: list[asyncio.Task] = []
+    mock_server = None
+
+    if settings.provider_configs.get("mock", {}).get("is_active"):
+        mock_server = MockWebSocketServer()
+        stream_tasks.append(asyncio.create_task(mock_server.start()))
+
+    for provider_name, provider_cfg in settings.provider_configs.items():
+        if not provider_cfg.get("is_active"):
+            continue
+        if "websocket_url" not in provider_cfg:
+            continue
+
+        async def run_stream(name=provider_name, cfg=provider_cfg.copy()):
+            adapter = KiteWebSocketAdapter(cfg)
+
+            async def on_tick(tick):
+                await persist_tick(name, tick)
+
+            adapter.set_tick_handler(on_tick)
+            provider_symbols = symbols_for_provider(name, cfg)
+            if not provider_symbols:
+                logging.warning("No symbols configured for provider %s; skipping stream.", name)
+                return
+            await adapter.realtime_connect(provider_symbols)
+
+        stream_tasks.append(asyncio.create_task(run_stream()))
+
+    metrics_collector.update_active_connections("websocket", len(stream_tasks))
+
+    try:
+        await stop_event.wait()
+    finally:
+        for task in stream_tasks:
+            task.cancel()
+        if mock_server:
+            await mock_server.stop()
+        scheduler_task.cancel()
+        aggregator_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await asyncio.gather(*stream_tasks, return_exceptions=True)
+            await scheduler_task
+            await aggregator_task
+        await storage.disconnect()
+        logging.info("Worker shut down cleanly")
 
 async def mock_server(args):
     """

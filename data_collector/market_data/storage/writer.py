@@ -245,3 +245,31 @@ class DataWriter:
                 "SELECT id FROM instruments WHERE symbol = $1",
                 symbol
             )
+
+    async def ensure_instrument(
+        self,
+        symbol: str,
+        provider_id: Optional[int] = None,
+        instrument_type: str = "stock",
+    ) -> int:
+        """Ensure an instrument exists and return its ID."""
+        existing = await self.get_instrument_id(symbol)
+        if existing:
+            return existing
+        if not self.pool:
+            raise RuntimeError("Not connected to database")
+
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(
+                """
+                INSERT INTO instruments (symbol, name, provider_id, instrument_type, is_active)
+                VALUES ($1, $2, $3, $4, TRUE)
+                ON CONFLICT (symbol) DO UPDATE SET
+                    provider_id = COALESCE(EXCLUDED.provider_id, instruments.provider_id)
+                RETURNING id
+                """,
+                symbol,
+                symbol,
+                provider_id,
+                instrument_type,
+            )

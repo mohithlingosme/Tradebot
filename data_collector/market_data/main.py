@@ -101,24 +101,31 @@ class MarketDataIngestion:
                 logger.error(f"Provider {provider_name} not found in database")
                 continue
 
-            # Create normalizer
-            normalizer = DataNormalizer(provider_id, 1)  # TODO: Get instrument ID
+            for symbol in provider_symbols:
+                instrument_cfg = next(
+                    (inst for inst in self.config['instruments'] if inst.get('symbol') == symbol),
+                    {},
+                )
+                instrument_id = await self.writer.ensure_instrument(
+                    symbol=symbol,
+                    provider_id=provider_id,
+                    instrument_type=instrument_cfg.get('instrument_type', 'stock'),
+                )
+                normalizer = DataNormalizer(provider_id, instrument_id)
 
-            # Create pipeline
-            pipeline = RealtimePipeline(
-                adapter=adapter,
-                writer=self.writer,
-                normalizer=normalizer,
-                batch_size=self.config['pipelines']['realtime']['batch_size'],
-                flush_interval=self.config['pipelines']['realtime']['flush_interval_seconds']
-            )
+                pipeline = RealtimePipeline(
+                    adapter=adapter,
+                    writer=self.writer,
+                    normalizer=normalizer,
+                    batch_size=self.config['pipelines']['realtime']['batch_size'],
+                    flush_interval=self.config['pipelines']['realtime']['flush_interval_seconds']
+                )
 
-            # Start pipeline
-            task = asyncio.create_task(
-                pipeline.start(provider_symbols, include_quotes=True)
-            )
-            tasks.append(task)
-            self.pipelines[provider_name] = pipeline
+                task = asyncio.create_task(
+                    pipeline.start([symbol], include_quotes=True)
+                )
+                tasks.append(task)
+                self.pipelines[f"{provider_name}:{symbol}"] = pipeline
 
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)

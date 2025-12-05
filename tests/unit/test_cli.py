@@ -10,8 +10,9 @@ import csv
 from unittest.mock import patch, AsyncMock, MagicMock, mock_open
 import sys
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+from tests.utils.paths import SRC_ROOT
+
+sys.path.insert(0, str(SRC_ROOT))
 
 from src.cli import backfill, realtime, migrate, mock_server, load_symbols_from_csv
 from market_data_ingestion.core.storage import DataStorage
@@ -255,4 +256,3 @@ class TestLoadSymbolsFromCSV:
             assert len(symbols) == 0
         finally:
             os.unlink(csv_path)
-

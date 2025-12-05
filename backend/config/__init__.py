@@ -66,6 +66,7 @@ def load_config(env: str | None = None) -> Dict[str, Any]:
         },
         "logging": {
             "level": settings.log_level,
+            "dir": settings.log_dir,
             "file": settings.log_file,
             "max_size": settings.log_max_size,
             "backup_count": settings.log_backup_count,

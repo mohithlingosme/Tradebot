@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
 import logging
-import os
+from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from typing import Dict, List
@@ -28,12 +28,12 @@ def configure_logging() -> None:
     level = getattr(logging, level_name, logging.INFO)
     formatter = logging.Formatter(LOG_FORMAT)
 
-    log_dir = os.path.dirname(settings.log_file)
-    if log_dir:
-        os.makedirs(log_dir, exist_ok=True)
+    log_dir = Path(settings.log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file_path = Path(settings.log_file)
 
     file_handler = RotatingFileHandler(
-        settings.log_file,
+        log_file_path,
         maxBytes=settings.log_max_bytes,
         backupCount=settings.log_backup_count,
     )

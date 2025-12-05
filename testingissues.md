@@ -175,7 +175,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 
 | Category                 | Key Issue / Improvement                    | Source/Reference                               | Fix/Action                  |
 |--------------------------|--------------------------------------------|------------------------------------------------|-----------------------------|
-| Tests                    | Missing pipeline/E2E tests                 | fix_TODO.md, README_FINBOT.md                  | Finish scenario test files   |
+| Tests                    | Missing pipeline/E2E tests                 | TODO.md (Section 3), README_FINBOT.md          | Finish scenario test files   |
 | Issues                   | Dependency/env/test glue complexity        | fundamental_issues.md, env_setup.md            | Use Docker + document env   |
 | Missing Dependencies     | TA-Lib optional, pandas-ta fallback        | requirements-indicators.txt, env_setup.md      | Use Docker or fallback      |
 | Failing Tests            | Log endpoint, mock/fixture edge cases      | test_api_auth.py, test_trading_engine.py       | Add robust edge coverage    |
@@ -191,7 +191,7 @@ See [docs/README_FINBOT.md#Running Tests](https://github.com/mohithlingosme/blac
 - [docs/README_FINBOT.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/README_FINBOT.md)
 - [docs/reports/project_status.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/reports/project_status.md)
 - [fundamental_issues.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/fundamental_issues.md)
-- [fix_TODO.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/fix_TODO.md)
+- [TODO.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/TODO.md#3-focused-fixes--mvp-tasks-formerly-fix_todomd)
 - [docs/env_setup.md](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/docs/env_setup.md)
 - [requirements-core.txt](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/requirements-core.txt)
 - [requirements-indicators.txt](https://github.com/mohithlingosme/blackboxai-finbot/blob/main/requirements-indicators.txt)

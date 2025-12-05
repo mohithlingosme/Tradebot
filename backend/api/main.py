@@ -38,6 +38,14 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from execution.base_broker import BaseBroker, Order as BrokerOrder, OrderSide, OrderStatus, OrderType
+from execution.mocked_broker import MockedBroker
+
+try:
+    from execution.kite_adapter import KiteBroker
+except ImportError:  # pragma: no cover - optional dependency for live mode
+    KiteBroker = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 from .auth import (
@@ -223,6 +231,51 @@ live_trading_engine = LiveTradingEngine(
     strategy_manager=strategy_manager,
     portfolio_manager=portfolio_manager
 ) if LiveTradingEngine else None
+
+paper_broker = MockedBroker()
+_live_broker: Optional[BaseBroker] = None
+
+
+def _resolve_broker(live_execution: bool) -> BaseBroker:
+    """Return the broker instance appropriate for the current trading mode."""
+    global _live_broker
+    if live_execution:
+        if KiteBroker is None:
+            raise RuntimeError("Live trading requires the kiteconnect dependency")
+        if _live_broker is None:
+            _live_broker = KiteBroker(
+                api_key=os.getenv("KITE_API_KEY"),
+                access_token=os.getenv("KITE_ACCESS_TOKEN"),
+            )
+        return _live_broker
+    return paper_broker
+
+
+def _resolve_trade_price(symbol: str, explicit_price: Optional[float]) -> float:
+    """Derive the execution price from the request or cached data feeds."""
+    if explicit_price is not None:
+        return float(explicit_price)
+    if mvp_engine and symbol in getattr(mvp_engine, "last_prices", {}):
+        return float(mvp_engine.last_prices[symbol])
+    live_prices = getattr(live_trading_engine, "last_prices", {}) if live_trading_engine else {}
+    if symbol in live_prices:
+        return float(live_prices[symbol])
+    raise HTTPException(
+        status_code=400,
+        detail="Price is required for manual trades when no quote source is available.",
+    )
+
+
+def _update_portfolio_from_fill(fill: BrokerOrder) -> None:
+    """Sync the in-memory portfolio after a simulated fill."""
+    if not portfolio_manager or fill.status != OrderStatus.FILLED:
+        return
+    side = "buy" if fill.side == OrderSide.BUY else "sell"
+    executed_qty = fill.filled_quantity or fill.quantity
+    price = fill.avg_fill_price or fill.price or 0.0
+    if executed_qty <= 0:
+        return
+    portfolio_manager.update_position(fill.symbol, int(executed_qty), float(price), side)
 
 class LogEntry(BaseModel):
     """Structured log entry returned by the /logs endpoint."""
@@ -867,40 +920,109 @@ async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_curr
             ensure_live_trading_allowed("Placing live trade orders")
             live_execution = True
         else:
-            logger.warning(
-                "Live broker calls are disabled in FINBOT_MODE=%s; using simulated execution",
+            logger.info(
+                "FINBOT_MODE=%s -> routing order to paper broker",
                 settings.finbot_mode,
             )
 
-        # TODO: Implement actual trade execution through broker integration
-        # For now, simulate trade execution
+        broker = _resolve_broker(live_execution)
+        price = _resolve_trade_price(trade.symbol, trade.price)
+        side = OrderSide.BUY if trade.side.lower() == "buy" else OrderSide.SELL
+        order_type = OrderType.MARKET if trade.price is None else OrderType.LIMIT
+        broker_order = BrokerOrder(
+            id=None,
+            symbol=trade.symbol,
+            side=side,
+            quantity=int(trade.quantity),
+            order_type=order_type,
+            price=price,
+        )
+
+        filled = broker.place_order(broker_order)
+        _update_portfolio_from_fill(filled)
+
         trade_result = {
-            "id": f"trade_{datetime.now().timestamp()}",
-            "symbol": trade.symbol,
-            "side": trade.side,
-            "quantity": trade.quantity,
-            "price": trade.price or 100.0,  # Mock price
-            "timestamp": datetime.now().isoformat(),
-            "status": "executed",
+            "id": filled.id or filled.external_id or f"trade_{datetime.now().timestamp()}",
+            "symbol": filled.symbol,
+            "side": filled.side.value,
+            "quantity": filled.filled_quantity or filled.quantity,
+            "price": filled.avg_fill_price or filled.price or price,
+            "timestamp": filled.updated_at.isoformat(),
+            "status": filled.status.value,
             "execution_mode": execution_mode,
             "live_execution": live_execution,
+            "external_id": filled.external_id,
         }
 
-        logger.info(f"Trade executed: {trade_result}")
         await trade_stream_manager.broadcast(
             {
                 "type": "trade",
                 "timestamp": trade_result["timestamp"],
-                "trade": trade_result
+                "trade": trade_result,
             }
         )
         return trade_result
 
     except HTTPException:
         raise
+    except RuntimeError as err:
+        logger.error("Broker error while placing trade: %s", err)
+        raise HTTPException(status_code=502, detail=str(err))
     except Exception as e:
         logger.error(f"Error placing trade: {e}")
         raise HTTPException(status_code=500, detail="Trade execution failed")
+
+
+@app.get("/config")
+async def get_runtime_config():
+    """Return the sanitized runtime configuration for dashboards."""
+    active_strategies = strategy_manager.get_active_strategies() if strategy_manager else []
+    return {
+        "app": {
+            "environment": settings.app_env,
+            "mode": settings.finbot_mode,
+            "live_trading_enabled": settings.finbot_mode == "live",
+            "allow_origins": settings.allow_origins,
+        },
+        "strategies": {
+            "loaded": strategy_manager.get_available_strategies() if strategy_manager else [],
+            "active": active_strategies,
+        },
+        "risk": {
+            "max_drawdown": getattr(portfolio_manager, "max_drawdown", None),
+            "max_daily_loss": getattr(portfolio_manager, "max_daily_loss", None),
+            "max_position_size": getattr(portfolio_manager, "max_position_size", None),
+        },
+    }
+
+
+@app.get("/pnl/today")
+async def get_today_pnl():
+    """Return current-day realized/unrealized P&L."""
+    if portfolio_manager:
+        current_value = portfolio_manager.calculate_portfolio_value()
+        start_value = getattr(portfolio_manager, "_daily_start_value", current_value)
+        positions = portfolio_manager.get_position_summary()
+        unrealized = sum(position["unrealized_pnl"] for position in positions)
+        realized = sum(position["realized_pnl"] for position in positions)
+        return {
+            "pnl": current_value - start_value,
+            "realized": realized,
+            "unrealized": unrealized,
+            "positions": positions,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    if mvp_engine:
+        portfolio = mvp_engine.broker.portfolio_summary()
+        return {
+            "pnl": portfolio["pnl"],
+            "realized": portfolio["realized_pnl"],
+            "unrealized": portfolio["unrealized_pnl"],
+            "positions": mvp_engine.broker.get_positions(),
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+    raise HTTPException(status_code=503, detail="Portfolio manager not available")
+
 
 @app.get("/health")
 async def get_health():

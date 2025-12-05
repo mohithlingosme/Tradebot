@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
-import re
 from pathlib import Path
 from typing import Any, Dict, List, Literal
 
 from pydantic import Field, ConfigDict
 from pydantic.functional_validators import field_validator
 from pydantic_settings import BaseSettings
+from common.env import expand_env_vars
 
 DEFAULT_PROVIDER_CONFIGS = {
     "yfinance": {"is_active": True, "rate_limit_per_minute": 100},
@@ -91,11 +90,11 @@ class MarketDataSettings(BaseSettings):
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
-        object.__setattr__(self, "provider_configs", self._expand_env_vars(self.provider_configs))
+        self._apply_env_expansion()
         self._load_yaml_overrides()
 
     def _load_yaml_overrides(self) -> None:
-        config = self._read_yaml_config()
+        config = expand_env_vars(self._read_yaml_config())
         if not config:
             return
 
@@ -106,7 +105,7 @@ class MarketDataSettings(BaseSettings):
         providers = config.get("providers")
         if providers:
             merged = {**DEFAULT_PROVIDER_CONFIGS, **providers}
-            object.__setattr__(self, "provider_configs", self._expand_env_vars(merged))
+            object.__setattr__(self, "provider_configs", expand_env_vars(merged))
 
         instruments = config.get("instruments")
         if isinstance(instruments, list):
@@ -141,20 +140,10 @@ class MarketDataSettings(BaseSettings):
         """Helper to return a deserialized provider configuration."""
         return self.provider_configs.get(name)
 
-    def _expand_env_vars(self, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {key: self._expand_env_vars(val) for key, val in value.items()}
-        if isinstance(value, list):
-            return [self._expand_env_vars(item) for item in value]
-        if isinstance(value, str):
-            pattern = re.compile(r"\$\{([^}]+)\}")
-
-            def replace(match: re.Match[str]) -> str:
-                env_value = os.getenv(match.group(1))
-                return env_value if env_value is not None else match.group(0)
-
-            return pattern.sub(replace, value)
-        return value
+    def _apply_env_expansion(self) -> None:
+        for field_name in getattr(self, "model_fields", {}):
+            value = getattr(self, field_name)
+            object.__setattr__(self, field_name, expand_env_vars(value))
 
 
 settings = MarketDataSettings()

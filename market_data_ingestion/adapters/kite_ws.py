@@ -4,7 +4,7 @@ import logging
 import random
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import tenacity
 import websockets
@@ -26,6 +26,7 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
         self.reconnect_interval = config.get("reconnect_interval", 5)
         self.symbols: List[str] = []
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
+        self._tick_handler: Optional[Callable[[NormalizedTick], Awaitable[None]]] = None
 
     async def __aenter__(self):
         return self
@@ -33,6 +34,10 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.ws:
             await self.ws.close()
+
+    def set_tick_handler(self, handler: Callable[[NormalizedTick], Awaitable[None]]):
+        """Register a coroutine that will receive each normalized tick."""
+        self._tick_handler = handler
 
     async def authenticate(self):
         logger.info("Authenticating with Kite API (mock)")
@@ -81,8 +86,10 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
 
                 # Start receiving messages
                 async for tick in self.stream():
-                    # In a full system, this would feed downstream. For now we just log.
-                    logger.debug(f"Tick: {tick.to_dict()}")
+                    if self._tick_handler:
+                        await self._tick_handler(tick)
+                    else:
+                        logger.debug(f"Tick: {tick.to_dict()}")
 
                 # Cancel heartbeat task if the connection closes
                 heartbeat_task.cancel()
@@ -142,10 +149,11 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
         while True:
             try:
                 await self.connect()
-                break  # If connection was successful, exit the loop
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 logger.error(f"Failed to connect. Retrying in {self.reconnect_interval} seconds...: {e}")
-                await asyncio.sleep(self.reconnect_interval)
+            await asyncio.sleep(self.reconnect_interval)
 
 async def main():
     # Example usage:

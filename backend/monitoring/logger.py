@@ -10,12 +10,21 @@ import logging.handlers
 import time
 import json
 import psutil
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from enum import Enum
 import threading
 import queue
+
+try:
+    from backend.app.config import settings as backend_settings
+except Exception:  # pragma: no cover - used when backend settings unavailable
+    backend_settings = None
+
+DEFAULT_LOG_DIR = (Path(__file__).resolve().parents[2] / "logs").resolve()
+DEFAULT_LOG_FILE = (DEFAULT_LOG_DIR / "finbot.log").resolve()
 
 logger = logging.getLogger(__name__)
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -63,7 +72,7 @@ class StructuredLogger:
     Structured logging system with context and performance tracking.
     """
 
-    def __init__(self, log_file: str = "logs/finbot.log", max_bytes: int = 10*1024*1024, backup_count: int = 5):
+    def __init__(self, log_file: str | None = None, max_bytes: int = 10*1024*1024, backup_count: int = 5):
         """
         Initialize structured logger.
 
@@ -72,18 +81,28 @@ class StructuredLogger:
             max_bytes: Maximum log file size
             backup_count: Number of backup files to keep
         """
-        self.log_file = log_file
+        self.log_file = str(self._resolve_log_file(log_file))
         self.metrics = PerformanceMetrics()
         self._setup_logging(max_bytes, backup_count)
         self._start_metrics_collection()
 
+    def _resolve_log_file(self, candidate: Optional[str]) -> Path:
+        """Resolve the log file location relative to backend settings or defaults."""
+        if candidate:
+            path = Path(candidate).expanduser()
+            if not path.is_absolute():
+                base = Path(backend_settings.log_dir) if backend_settings else DEFAULT_LOG_DIR
+                path = base / candidate
+            return path.resolve()
+        if backend_settings:
+            return Path(backend_settings.log_file).resolve()
+        return DEFAULT_LOG_FILE
+
     def _setup_logging(self, max_bytes: int, backup_count: int):
         """Setup logging handlers and formatters"""
-        # Create logs directory
-        import os
-        log_dir = os.path.dirname(self.log_file)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
+        # Create logs directory using absolute paths
+        log_dir = Path(self.log_file).resolve().parent
+        log_dir.mkdir(parents=True, exist_ok=True)
 
         # Create logger
         self.logger = logging.getLogger('finbot')

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Literal, Sequence
 
-from pydantic import Field, ConfigDict
+from pydantic import ConfigDict, Field, model_validator
 from pydantic.functional_validators import field_validator
 from pydantic_settings import BaseSettings
+
+from common.env import expand_env_vars
 
 DEFAULT_ORIGINS = ["http://localhost:8501", "http://localhost:5173", "http://localhost:3000"]
 DEFAULT_NEWS_SOURCES = [
@@ -21,6 +24,9 @@ DEFAULT_NEWS_SOURCES = [
         "symbols": ["SPY", "QQQ"],
     },
 ]
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class BackendSettings(BaseSettings):
@@ -65,7 +71,9 @@ class BackendSettings(BaseSettings):
     initial_cash: float = Field(100000.0, env="INITIAL_CASH")
 
     log_level: str = Field("INFO", env="LOG_LEVEL")
-    log_file: str = Field("logs/finbot.log", env="LOG_FILE")
+    log_dir: str = Field("logs", env="LOG_DIR")
+    log_filename: str = Field("finbot.log", env="LOG_FILENAME")
+    log_file: str | None = Field(None, env="LOG_FILE")
     log_max_size: int = Field(10_485_760, env="LOG_MAX_SIZE")
     log_backup_count: int = Field(5, env="LOG_BACKUP_COUNT")
 
@@ -95,6 +103,37 @@ class BackendSettings(BaseSettings):
         if isinstance(value, str):
             return [symbol.strip() for symbol in value.split(",") if symbol.strip()]
         return list(value)
+
+    @staticmethod
+    def _resolve_path(value: str, base: Path | None = None) -> Path:
+        candidate = Path(value).expanduser()
+        if not candidate.is_absolute():
+            prefix = base or PROJECT_ROOT
+            candidate = prefix / candidate
+        return candidate.resolve()
+
+    @model_validator(mode="after")
+    def _finalize_log_paths(self) -> "BackendSettings":
+        self._apply_env_expansion()
+        log_dir_path = self._resolve_path(self.log_dir or "logs")
+
+        if self.log_file:
+            file_candidate = Path(self.log_file).expanduser()
+            if not file_candidate.is_absolute():
+                file_candidate = (log_dir_path / self.log_file).resolve()
+            else:
+                file_candidate = file_candidate.resolve()
+        else:
+            file_candidate = (log_dir_path / self.log_filename).resolve()
+
+        self.log_file = str(file_candidate)
+        self.log_dir = str(file_candidate.parent)
+        return self
+
+    def _apply_env_expansion(self) -> None:
+        for field_name in getattr(self, "model_fields", {}):
+            value = getattr(self, field_name)
+            object.__setattr__(self, field_name, expand_env_vars(value))
 
 
 settings = BackendSettings()

@@ -1,7 +1,13 @@
 from __future__ import annotations
 
+import csv
+import json
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Union
 
+from common.market_data import Candle
 from trading_engine.phase4.models import (
     Bar,
     OrderFill,
@@ -18,12 +24,225 @@ from trading_engine.phase4.position_sizing import PositionSizer
 from trading_engine.phase4.risk import RiskManager
 from trading_engine.phase4.strategy import Strategy
 
+from risk.risk_engine import RiskEngine
 from .config import BacktestConfig
 from .costs import CostModel
 from .reporting import BacktestReport, build_performance_report
 from .simulator import TradeSimulator
 
 MarketEvent = Union[Bar, Tick]
+
+
+@dataclass
+class TradeRecord:
+    """Simple representation of a completed trade."""
+
+    symbol: str
+    side: str
+    quantity: float
+    entry_time: datetime
+    exit_time: datetime
+    entry_price: float
+    exit_price: float
+    pnl: float
+
+
+@dataclass
+class EquityPoint:
+    timestamp: datetime
+    equity: float
+
+
+@dataclass
+class BacktestMetrics:
+    total_pnl: float
+    win_rate: float
+    max_drawdown: float
+    profit_factor: float
+
+
+@dataclass
+class SimpleBacktestResult:
+    trades: List[TradeRecord]
+    equity_curve: List[EquityPoint]
+    metrics: BacktestMetrics
+
+
+def _default_fill_price(bar: Candle | Bar, side: str, execution_model) -> float:
+    if execution_model:
+        filler = getattr(execution_model, "fill_price", None)
+        if callable(filler):
+            return float(filler(bar, side))
+    return float(getattr(bar, "close", bar.price if hasattr(bar, "price") else 0.0))
+
+
+def _risk_allows(symbol: str, side: str, quantity: float, price: float, risk_engine) -> bool:
+    if not risk_engine:
+        return True
+    approve = getattr(risk_engine, "approve_trade", None)
+    if callable(approve):
+        return bool(approve(symbol=symbol, side=side, quantity=quantity, price=price))
+    return True
+
+
+def _mark_to_market(cash: float, positions: Dict[str, Dict[str, float]], last_prices: Dict[str, float]) -> float:
+    equity = cash
+    for symbol, position in positions.items():
+        equity += position["qty"] * last_prices.get(symbol, position["entry_price"])
+    return equity
+
+
+def _max_drawdown(equity_curve: List[EquityPoint]) -> float:
+    peak = equity_curve[0].equity if equity_curve else 0.0
+    max_dd = 0.0
+    for point in equity_curve:
+        if point.equity > peak:
+            peak = point.equity
+        drawdown = (peak - point.equity) / peak if peak else 0.0
+        max_dd = max(max_dd, drawdown)
+    return max_dd
+
+
+def _profit_factor(trades: List[TradeRecord]) -> float:
+    gains = sum(trade.pnl for trade in trades if trade.pnl > 0)
+    losses = sum(-trade.pnl for trade in trades if trade.pnl < 0)
+    if losses == 0:
+        return float("inf") if gains > 0 else 0.0
+    return gains / losses
+
+
+def run_backtest(strategy: Strategy, data: Sequence[Candle], initial_capital: float, risk_engine: RiskEngine | None = None, execution_model=None) -> SimpleBacktestResult:
+    """
+    Simple single-strategy backtest loop.
+
+    Args:
+        strategy: Strategy instance implementing `on_bar`.
+        data: Iterable of normalized candles sorted by timestamp.
+        initial_capital: Starting equity for the simulation.
+        risk_engine: Optional object with `approve_trade(**kwargs) -> bool`.
+        execution_model: Optional object with `fill_price(bar, side) -> float`.
+
+    Returns:
+        SimpleBacktestResult containing trades, equity curve, and summary metrics.
+    """
+    cash = initial_capital
+    positions: Dict[str, Dict[str, float]] = {}
+    trades: List[TradeRecord] = []
+    equity_curve: List[EquityPoint] = []
+    last_prices: Dict[str, float] = {}
+
+    engine = risk_engine or RiskEngine(capital=initial_capital)
+
+    for bar in data:
+        last_prices[bar.symbol] = bar.close
+        signal = strategy.on_bar(bar, strategy.state)
+        quantity = 1.0  # simple V1 sizing
+
+        if signal == "BUY" and bar.symbol not in positions:
+            fill_price = _default_fill_price(bar, "BUY", execution_model)
+            stop_distance = getattr(strategy.state, "stop_distance", abs(getattr(bar, "close", fill_price) * 0.01))
+            if not engine.can_open_trade(quantity, stop_distance):
+                continue
+            positions[bar.symbol] = {
+                "qty": quantity,
+                "entry_price": fill_price,
+                "entry_time": bar.timestamp,
+            }
+            cash -= quantity * fill_price
+        elif signal == "SELL" and bar.symbol in positions:
+            fill_price = _default_fill_price(bar, "SELL", execution_model)
+            position = positions.pop(bar.symbol)
+            cash += position["qty"] * fill_price
+            pnl = (fill_price - position["entry_price"]) * position["qty"]
+            trades.append(
+                TradeRecord(
+                    symbol=bar.symbol,
+                    side="LONG",
+                    quantity=position["qty"],
+                    entry_time=position["entry_time"],
+                    exit_time=bar.timestamp,
+                    entry_price=position["entry_price"],
+                    exit_price=fill_price,
+                    pnl=pnl,
+                )
+            )
+            engine.register_trade_result(pnl)
+
+        equity_curve.append(
+            EquityPoint(timestamp=bar.timestamp, equity=_mark_to_market(cash, positions, last_prices))
+        )
+
+    # Close any residual positions at last known prices
+    for symbol, position in list(positions.items()):
+        last_price = last_prices.get(symbol, position["entry_price"])
+        cash += position["qty"] * last_price
+        pnl = (last_price - position["entry_price"]) * position["qty"]
+        trades.append(
+            TradeRecord(
+                symbol=symbol,
+                side="LONG",
+                quantity=position["qty"],
+                entry_time=position["entry_time"],
+                exit_time=datetime.utcnow(),
+                entry_price=position["entry_price"],
+                exit_price=last_price,
+                pnl=pnl,
+            )
+        )
+        positions.pop(symbol)
+
+    total_pnl = cash - initial_capital
+    wins = len([trade for trade in trades if trade.pnl > 0])
+    win_rate = wins / len(trades) if trades else 0.0
+    metrics = BacktestMetrics(
+        total_pnl=total_pnl,
+        win_rate=win_rate,
+        max_drawdown=_max_drawdown(equity_curve) if equity_curve else 0.0,
+        profit_factor=_profit_factor(trades),
+    )
+
+    _persist_backtest_artifacts(trades, metrics)
+    # TODO: integrate slippage, latency, commission/tax models, and walk-forward validation.
+    return SimpleBacktestResult(trades=trades, equity_curve=equity_curve, metrics=metrics)
+
+
+def _persist_backtest_artifacts(trades: List[TradeRecord], metrics: BacktestMetrics) -> None:
+    logs_dir = Path("logs")
+    logs_dir.mkdir(parents=True, exist_ok=True)
+
+    trades_path = logs_dir / "backtest_trades.csv"
+    with trades_path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "symbol",
+                "side",
+                "quantity",
+                "entry_time",
+                "exit_time",
+                "entry_price",
+                "exit_price",
+                "pnl",
+            ],
+        )
+        writer.writeheader()
+        for trade in trades:
+            row = asdict(trade)
+            row["entry_time"] = trade.entry_time.isoformat()
+            row["exit_time"] = trade.exit_time.isoformat()
+            writer.writerow(row)
+
+    summary_path = logs_dir / "backtest_summary.json"
+    with summary_path.open("w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "metrics": asdict(metrics),
+                "trade_count": len(trades),
+            },
+            f,
+            indent=2,
+            default=str,
+        )
 
 
 class EventBacktester:

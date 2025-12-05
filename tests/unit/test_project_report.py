@@ -1,8 +1,7 @@
 """Tests for the automated project report generator."""
 
-from pathlib import Path
-
 from scripts.generate_project_report import Task, TaskFile, build_report, parse_tasks
+from tests.utils.paths import repo_path
 
 
 def test_parse_tasks_with_sections():
@@ -23,7 +22,7 @@ def test_parse_tasks_with_sections():
 
 def test_build_report_includes_summary_and_pending_items():
     task_file = TaskFile(
-        path=Path("TODO.md"),
+        path=repo_path("TODO.md"),
         tasks=[Task(description="Task A", completed=False, section="Phase A"), Task(description="Task B", completed=True, section=None)],
     )
 

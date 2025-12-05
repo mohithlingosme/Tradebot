@@ -1,8 +1,8 @@
-import os
 import sys
 
-BACKEND_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "backend")
-sys.path.insert(0, os.path.abspath(BACKEND_PATH))
+from tests.utils.paths import BACKEND_ROOT
+
+sys.path.insert(0, str(BACKEND_ROOT))
 
 from core.ai_pipeline import AIPipeline, PromptRequest  # type: ignore
 from core.safety import SafetyContext, SafetyFilter  # type: ignore

@@ -18,9 +18,11 @@ import os
 import threading
 import time
 import random
+import statistics
+from collections import defaultdict, deque
 from typing import Dict, List, Optional, Callable, Any
 from datetime import datetime, timedelta
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 import uuid
 
@@ -45,6 +47,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path compatibility shim
 from execution.base_broker import BaseBroker, Order as BrokerOrder, OrderSide, OrderStatus, OrderType
 from execution.mocked_broker import MockedBroker
 from risk.risk_manager import AccountState, OrderRequest, RiskLimits, RiskManager
+from common.env import expand_env_vars
 # from ..data_ingestion.data_fetcher import DataFetcher
 # from ..data_ingestion.data_loader import DataLoader
 
@@ -115,7 +118,7 @@ class LiveTradingEngine:
             data_fetcher: Data fetcher for live data (optional)
             data_loader: Data loader for historical context (optional)
         """
-        self.config = config
+        self.config = self._resolve_config(config)
         self.strategy_manager = strategy_manager
         self.portfolio_manager = portfolio_manager
         self.data_fetcher = data_fetcher
@@ -127,13 +130,17 @@ class LiveTradingEngine:
         self.state = EngineState.STOPPED
         self.logger = self.get_logger()
         self.circuit_breaker = CircuitBreaker(
-            failure_threshold=config.circuit_breaker_threshold
+            failure_threshold=self.config.circuit_breaker_threshold
         )
 
         # Execution tracking
         self.execution_history: List[ExecutionResult] = []
         self.active_trades: Dict[str, Dict] = {}
         self.last_data_update: Dict[str, datetime] = {}
+        self.price_history: Dict[str, deque] = defaultdict(lambda: deque(maxlen=200))
+        self.last_prices: Dict[str, float] = {}
+        self._strategy_signal_times: Dict[str, datetime] = {}
+        self._trading_halted_until: Optional[datetime] = None
 
         # Background tasks
         self._running = False
@@ -145,7 +152,65 @@ class LiveTradingEngine:
         self.on_trade_executed: Optional[Callable[[Dict], None]] = None
         self.on_error: Optional[Callable[[Exception, str], None]] = None
 
-        logger.info(f"Initialized LiveTradingEngine in {config.mode.value} mode")
+        logger.info(f"Initialized LiveTradingEngine in {self.config.mode.value} mode")
+
+    def _resolve_config(self, config: LiveTradingConfig) -> LiveTradingConfig:
+        expanded = expand_env_vars(asdict(config))
+        return LiveTradingConfig(**expanded)
+
+    def _record_market_snapshot(self, symbol: str, data: Dict[str, Any]) -> None:
+        """Track latest price so position sizing can use recent volatility."""
+        price = data.get("close") or data.get("price") or data.get("last_price")
+        if price is None:
+            return
+        price = float(price)
+        self.last_prices[symbol] = price
+        history = self.price_history[symbol]
+        history.append(price)
+
+    def _volatility_adjustment(self, symbol: str) -> float:
+        """Map recent price volatility into a sizing multiplier."""
+        history = self.price_history.get(symbol)
+        if not history or len(history) < 2:
+            return 1.0
+        returns = []
+        prev = history[0]
+        for current in list(history)[1:]:
+            if prev != 0:
+                returns.append(abs(current - prev) / abs(prev))
+            prev = current
+        if not returns:
+            return 1.0
+        recent = returns[-20:]
+        vol = statistics.pstdev(recent)
+        # Reduce sizing as volatility grows (cap between 0.25x and 1.25x)
+        return max(0.25, min(1.25, 1.0 - min(vol * 10, 0.75)))
+
+    def _trading_halted(self) -> bool:
+        if not self._trading_halted_until:
+            return False
+        return datetime.utcnow() < self._trading_halted_until
+
+    def _snapshot_from_data(self, data: Any) -> Optional[Dict[str, Any]]:
+        if isinstance(data, dict):
+            records = data.get("records")
+            if isinstance(records, list) and records:
+                return records[-1]
+            return data
+        if isinstance(data, list) and data:
+            return data[-1]
+        return None
+
+    async def _apply_risk_mitigation(self, reason: str, context: Dict[str, Any]) -> None:
+        """Flatten positions and pause trading after a severe risk breach."""
+        self._trading_halted_until = datetime.utcnow() + timedelta(minutes=5)
+        await self._close_all_positions()
+        self.logger.log(
+            LogLevel.ERROR,
+            Component.RISK_MGMT,
+            "Applied risk mitigation",
+            data={"reason": reason, **context},
+        )
 
     async def start(self) -> bool:
         """
@@ -403,6 +468,9 @@ class LiveTradingEngine:
                 data = self.data_fetcher.fetch_real_time_data(symbol)
                 if data:
                     self.last_data_update[symbol] = datetime.now()
+                    snapshot = self._snapshot_from_data(data)
+                    if snapshot:
+                        self._record_market_snapshot(symbol, snapshot)
                     return data
 
             # Fallback to data loader for recent data
@@ -412,11 +480,18 @@ class LiveTradingEngine:
                 start_date = end_date - timedelta(hours=24)  # Last 24 hours
                 data = self.data_loader.load_historical_data(symbol, start_date, end_date)
                 if data:
+                    snapshot = self._snapshot_from_data(data)
+                    if snapshot:
+                        self._record_market_snapshot(symbol, snapshot)
                     return data
 
             # Generate mock data for simulation
             if self.config.mode == TradingMode.SIMULATION:
-                return self._generate_mock_data(symbol)
+                data = self._generate_mock_data(symbol)
+                snapshot = self._snapshot_from_data(data)
+                if snapshot:
+                    self._record_market_snapshot(symbol, snapshot)
+                return data
 
             return None
 
@@ -505,16 +580,18 @@ class LiveTradingEngine:
             # Adjust based on confidence
             confidence_multiplier = confidence  # 0.5 confidence = 50% size
 
-            # Adjust based on volatility (simplified)
-            volatility_adjustment = 1.0  # TODO: Calculate actual volatility
+            # Adjust based on volatility gleaned from recent prices
+            volatility_adjustment = self._volatility_adjustment(symbol)
 
             position_value = portfolio_value * base_size_pct * confidence_multiplier * volatility_adjustment
 
-            # Get current price (simplified - assume $100 for mock)
-            current_price = 100.0  # TODO: Get actual price
+            # Use the last observed price; fall back to a conservative default
+            current_price = self.last_prices.get(symbol, 0.0)
+            if current_price <= 0:
+                current_price = 100.0
 
             # Calculate quantity
-            quantity = int(position_value / current_price)
+            quantity = max(1, int(position_value / current_price))
 
             # Check risk limits
             if not self.portfolio_manager._check_position_size_limit(symbol, quantity, current_price, signal == 'buy'):
@@ -551,8 +628,37 @@ class LiveTradingEngine:
             if not risk_status['overall_status']:
                 return False
 
-            # Check strategy-specific limits
-            # TODO: Add strategy-specific risk checks
+            # Trading halt / cooldowns
+            if self._trading_halted():
+                self.logger.log(
+                    LogLevel.WARNING,
+                    Component.RISK_MGMT,
+                    "Trading temporarily halted due to prior risk event.",
+                )
+                return False
+
+            strategy_key = f"{result.strategy_name}:{result.symbol}"
+            existing_trade = self.active_trades.get(f"{result.symbol}_{result.strategy_name}")
+            if existing_trade and result.signal.lower() == "buy" and existing_trade.get("quantity", 0) > 0:
+                self.logger.log(
+                    LogLevel.WARNING,
+                    Component.RISK_MGMT,
+                    "Strategy already long; skipping duplicate entry",
+                    data={"strategy": result.strategy_name, "symbol": result.symbol},
+                )
+                return False
+
+            now = datetime.utcnow()
+            last_signal_time = self._strategy_signal_times.get(strategy_key)
+            if last_signal_time and (now - last_signal_time) < timedelta(seconds=30):
+                self.logger.log(
+                    LogLevel.WARNING,
+                    Component.RISK_MGMT,
+                    "Strategy cooldown active; rejecting rapid-fire signal",
+                    data={"strategy": result.strategy_name, "symbol": result.symbol},
+                )
+                return False
+            self._strategy_signal_times[strategy_key] = now
 
             return True
 
@@ -573,8 +679,7 @@ class LiveTradingEngine:
                         "Portfolio risk limits have been breached",
                         risk_status
                     )
-
-                    # TODO: Implement risk mitigation actions (reduce positions, stop trading, etc.)
+                    await self._apply_risk_mitigation("risk_limits_breached", risk_status)
 
                 await asyncio.sleep(self.config.risk_check_interval_seconds)
 
@@ -590,12 +695,39 @@ class LiveTradingEngine:
             positions = self.portfolio_manager.get_position_summary()
 
             for position in positions:
-                if position['quantity'] != 0:
-                    # TODO: Implement actual position closing
+                qty = int(position['quantity'])
+                if qty == 0:
+                    continue
+                side = OrderSide.SELL if qty > 0 else OrderSide.BUY
+                price = self.last_prices.get(position['symbol'], position['current_price'])
+                order = BrokerOrder(
+                    id=None,
+                    symbol=position['symbol'],
+                    side=side,
+                    quantity=abs(qty),
+                    order_type=OrderType.MARKET,
+                    price=price,
+                )
+                try:
+                    fill = self.broker.place_order(order)
+                    if self.portfolio_manager and fill.status == OrderStatus.FILLED:
+                        trade_side = "buy" if side == OrderSide.BUY else "sell"
+                        self.portfolio_manager.update_position(
+                            fill.symbol,
+                            int(fill.filled_quantity or fill.quantity),
+                            float(fill.avg_fill_price or price or 0.0),
+                            trade_side,
+                        )
                     self.logger.log(
                         LogLevel.INFO,
                         Component.EXECUTION,
-                        f"Closing position: {position['symbol']} {position['quantity']} shares"
+                        f"Closed position via broker: {position['symbol']} qty={qty}",
+                    )
+                except Exception as exc:
+                    self.logger.log_error(
+                        Component.EXECUTION,
+                        exc,
+                        {"symbol": position['symbol'], "operation": "flatten"},
                     )
 
         except Exception as e:

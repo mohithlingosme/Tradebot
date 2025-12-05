@@ -9,9 +9,10 @@ import tempfile
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock, MagicMock
 
-# Add market_data_ingestion to path
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from tests.utils.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 from market_data_ingestion.src.api import app
 from market_data_ingestion.core.storage import DataStorage
@@ -271,4 +272,3 @@ class TestSymbolsEndpoint:
         assert "symbols" in data
         assert "count" in data
         assert isinstance(data["symbols"], list)
-

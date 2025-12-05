@@ -5,6 +5,7 @@ from .kite_ws import KiteWebSocketAdapter
 from .fyers import FyersAdapter
 from .binance import BinanceAdapter
 from .polygon import PolygonAdapter
+from .zerodha_ws import ZerodhaWebSocketAdapter
 
 
 ADAPTER_REGISTRY = {
@@ -14,6 +15,7 @@ ADAPTER_REGISTRY = {
     "fyers": FyersAdapter,
     "binance": BinanceAdapter,
     "polygon": PolygonAdapter,
+    "zerodha": ZerodhaWebSocketAdapter,
 }
 
 

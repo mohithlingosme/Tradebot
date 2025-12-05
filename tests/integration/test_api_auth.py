@@ -11,9 +11,9 @@ import httpx
 import asyncio
 from fastapi.testclient import TestClient
 
-# Add repository root to path so backend package resolves
-repo_root = os.path.join(os.path.dirname(__file__), "..", "..")
-sys.path.insert(0, repo_root)
+from tests.utils.paths import REPO_ROOT
+
+sys.path.insert(0, str(REPO_ROOT))
 
 # Import with type ignore for linter - path is added at runtime
 from backend.api.main import app  # type: ignore

@@ -5,9 +5,9 @@ Unit tests for technical indicators
 import unittest
 import numpy as np
 import sys
-import os
-backend_path = os.path.join(os.path.dirname(__file__), '../../backend')
-sys.path.insert(0, backend_path)
+from tests.utils.paths import BACKEND_ROOT
+
+sys.path.insert(0, str(BACKEND_ROOT))
 
 from indicators.rsi import RSI
 from indicators.macd import MACD

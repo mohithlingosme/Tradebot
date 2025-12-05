@@ -72,6 +72,9 @@ python -m market_data_ingestion.src.api
 
 # 5. Start frontend (React/Tauri)
 cd frontend && npm install && npm run dev
+
+# 6. Run the full Python test suite any time with a single command
+cd .. && pytest
 ```
 You can also run data collector scripts (backfill, realtime, migrate) via `python data_collector/scripts/<name>.py`.
 
@@ -82,6 +85,13 @@ python -m scripts.dev_run backend
 python -m scripts.dev_run ingestion
 python -m scripts.dev_run engine
 ```
+
+### Dev helper CLI (`scripts/dev.py`)
+- Run the full pytest suite: `python -m scripts.dev tests`
+- Pass additional pytest arguments: `python -m scripts.dev tests -- -k "risk and not slow"`
+- Run lint/format checks (`black`, `isort`, `flake8`, `yamllint`): `python -m scripts.dev lint`
+- Launch backend + ingestion + frontend together: `python -m scripts.dev services` (Ctrl+C to stop all processes)
+
 
 ## Installation Modes
 - Core only (API + DB/auth/logging): `scripts\\install_core.bat` (uses `requirements-core.txt`).
@@ -124,6 +134,13 @@ The compose file spins up the backend API, PostgreSQL, and the ingestion profile
 - `docs/trading_engine/`: Strategy and backtesting walkthroughs
 - `docs/architecture.md`: Component interaction diagram
 - MVP run guide: [`docs/mvp_guide.md`](./docs/mvp_guide.md) for the paper-mode EMA crossover loop and dashboard.
+
+## CI/CD Troubleshooting
+- **Python version mismatch** – GitHub Actions is pinned to Python `3.11.9`. If the `setup-python` step fails or pytest errors with "requires Python 3.11", recreate your virtualenv: `py -3.11 -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt`.
+- **`pip check` / dependency conflicts** – The CI `Pre-flight checks` stage runs `pip check` before pytest. Re-run locally with `python -m scripts.dev lint` or `pip check` to see the exact package causing the conflict, then align your lock files before pushing.
+- **`yamllint` failures** – Workflow files and `docker-compose.yml` are linted in CI. Run `yamllint .github/workflows/*.yml` (and compose files) locally to spot indentation/tab issues.
+- **Node mismatch / frontend build errors** – The frontend job pins Node `18.x`. If `npm ci` fails locally but not in CI, ensure you are using Node 18 (`nvm use 18`). Conversely, if CI fails, run `npm ci && npm run lint && npm run build` in `frontend/` to reproduce before pushing.
+- **Safety audit failures** – CI runs `python scripts/safety_audit.py`. When it flags missing env vars or secrets, fix your `.env`/repo state before re-running `python -m scripts.dev tests`.
 
 ## Future Work
 - Expand AI assistant coverage with more models and knowledge connectors

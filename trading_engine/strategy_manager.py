@@ -282,20 +282,56 @@ class StrategyManager:
         """
         return {name: strategy.performance for name, strategy in self.strategies.items()}
 
-    def optimize_strategy(self, strategy_name: str, param_ranges: Dict) -> Dict:
+    def optimize_strategy(
+        self, strategy_name: str, param_ranges: Dict, market_data=None, symbol: str = "TEST"
+    ) -> Dict:
         """
         Optimize strategy parameters using grid search.
 
         Args:
             strategy_name: Name of strategy to optimize
             param_ranges: Dictionary of parameter ranges to test
+            market_data: Historical dataframe for optimization
+            symbol: Symbol used during optimization simulation
 
         Returns:
             Best parameter combination and performance
         """
-        # TODO: Implement parameter optimization
-        self.logger.info(f"Optimizing strategy {strategy_name} with params: {param_ranges}")
-        return {}
+        if strategy_name not in self.strategies:
+            raise ValueError(f"Strategy not found: {strategy_name}")
+        if market_data is None:
+            raise ValueError("market_data must be supplied for optimization")
+
+        try:
+            import pandas as pd  # type: ignore
+        except ImportError as exc:  # pragma: no cover - dependency guaranteed in trading stack
+            raise RuntimeError("pandas is required for strategy optimization") from exc
+
+        from .backtester import BacktestConfig, BacktestMode, Backtester
+
+        if not isinstance(market_data, pd.DataFrame) or market_data.empty:
+            raise ValueError("market_data must be a populated pandas DataFrame")
+
+        start_dt = pd.to_datetime(market_data.index[0]).to_pydatetime()
+        end_dt = pd.to_datetime(market_data.index[-1]).to_pydatetime()
+        backtest_config = BacktestConfig(
+            start_date=start_dt,
+            end_date=end_dt,
+            mode=BacktestMode.OPTIMIZATION,
+        )
+        backtester = Backtester(backtest_config)
+        self.logger.info(
+            "Optimizing %s across %s parameter combinations",
+            strategy_name,
+            len(param_ranges),
+        )
+        strategy_class = self.strategies[strategy_name].__class__
+        return backtester.optimize_strategy(
+            strategy_class=strategy_class,
+            market_data=market_data,
+            param_ranges=param_ranges,
+            symbol=symbol,
+        )
 
     def validate_strategy(self, strategy_name: str, test_data: List[Dict]) -> Dict:
         """

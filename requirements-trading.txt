@@ -13,3 +13,4 @@ yfinance~=0.2
 vaderSentiment~=3.3
 beautifulsoup4~=4.12
 aiohttp~=3.9
+kiteconnect~=4.2

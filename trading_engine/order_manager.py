@@ -193,7 +193,16 @@ class OrderManager:
             return None
 
         order = self.orders[order_id]
-        # TODO: Query broker for latest status if needed
+        if isinstance(self.broker, BaseBroker):
+            try:
+                broker_status = self.broker.get_order_status(order_id)
+                if broker_status:
+                    order.status = broker_status.status
+                    order.filled_quantity = broker_status.filled_quantity
+                    order.average_price = broker_status.avg_fill_price or order.average_price
+                    order.timestamp = broker_status.updated_at
+            except Exception as exc:
+                self.logger.warning("Failed to refresh broker status for %s: %s", order_id, exc)
         return order.to_dict()
 
     def get_all_orders(self, status_filter: Optional[OrderStatus] = None) -> List[Dict]:

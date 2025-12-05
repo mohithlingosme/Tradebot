@@ -11,6 +11,7 @@ def test_read_logs_raises_when_missing(monkeypatch, tmp_path):
     # Ensure settings.log_file points to a missing file
     missing_path = tmp_path / "no-such-log.log"
     monkeypatch.setattr(settings, "log_file", str(missing_path))
+    monkeypatch.setattr(settings, "log_dir", str(missing_path.parent))
 
     manager = LoggingManager()
     with pytest.raises(LogAccessError):
@@ -23,6 +24,7 @@ def test_read_logs_raises_when_unreadable(monkeypatch, tmp_path):
     test_file = tmp_path / "test.log"
     test_file.write_text("2023-01-01 10:00:00,000 - app - INFO - [system] start")
     monkeypatch.setattr(settings, "log_file", str(test_file))
+    monkeypatch.setattr(settings, "log_dir", str(test_file.parent))
 
     class FakePath(type(Path("."))):
         pass

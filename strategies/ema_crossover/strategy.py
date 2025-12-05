@@ -3,7 +3,7 @@ from __future__ import annotations
 """Exponential moving average crossover strategy."""
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import Any, Dict, List
 
 from common.market_data import Candle
 from strategies.base import Signal, Strategy
@@ -18,10 +18,11 @@ class EMACrossoverConfig:
     symbol_universe: List[str] = field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
 
 
-class EMACrossoverStrategy:
+class EMACrossoverStrategy(Strategy):
     """Simple long-only EMA crossover strategy."""
 
     def __init__(self, config: EMACrossoverConfig | dict | None = None) -> None:
+        super().__init__()
         cfg = config or {}
         if isinstance(cfg, dict):
             cfg = EMACrossoverConfig(**cfg)
@@ -30,58 +31,66 @@ class EMACrossoverStrategy:
         if self.config.short_window >= self.config.long_window:
             raise ValueError("short_window must be smaller than long_window")
 
-        self.short_multiplier = 2 / (self.config.short_window + 1)
-        self.long_multiplier = 2 / (self.config.long_window + 1)
-
-        self.short_ema: float | None = None
-        self.long_ema: float | None = None
-        self.position: str = "flat"
-        self._last_signal: Signal = "NONE"
-        self._ema_history: List[tuple] = []
-        self._allowed_symbols = {symbol.upper() for symbol in self.config.symbol_universe}
+        self.state.update({
+            'short_multiplier': 2 / (self.config.short_window + 1),
+            'long_multiplier': 2 / (self.config.long_window + 1),
+            'short_ema': None,
+            'long_ema': None,
+            'position': 'flat',
+            'last_signal': 'HOLD',
+            'ema_history': [],
+            'allowed_symbols': {symbol.upper() for symbol in self.config.symbol_universe}
+        })
 
     def _update_ema(self, price: float, current: float | None, multiplier: float) -> float:
         if current is None:
             return price
         return (price - current) * multiplier + current
 
-    def update(self, candle: Candle) -> None:
-        """Ingest the next candle and update indicator state."""
-        if self._allowed_symbols and candle.symbol.upper() not in self._allowed_symbols:
-            return
-        if candle.timeframe and candle.timeframe != self.config.timeframe:
-            return
+    def on_bar(self, bar: Candle, state: Dict[str, Any]) -> Signal:
+        """Process a new bar and return a trading signal.
 
-        price = candle.close
-        previous_short = self.short_ema
-        previous_long = self.long_ema
+        Args:
+            bar: The new candle/bar data.
+            state: Mutable state dictionary for internal strategy state.
 
-        self.short_ema = self._update_ema(price, self.short_ema, self.short_multiplier)
-        self.long_ema = self._update_ema(price, self.long_ema, self.long_multiplier)
-        self._ema_history.append((candle.timestamp, self.short_ema, self.long_ema))
+        Returns:
+            Signal: 'BUY', 'SELL', or 'HOLD' based on strategy logic.
+        """
+        if state['allowed_symbols'] and bar.symbol.upper() not in state['allowed_symbols']:
+            return 'HOLD'
+        if bar.timeframe and bar.timeframe != self.config.timeframe:
+            return 'HOLD'
 
-        self._last_signal = "NONE"
+        price = bar.close
+        previous_short = state['short_ema']
+        previous_long = state['long_ema']
+
+        state['short_ema'] = self._update_ema(price, state['short_ema'], state['short_multiplier'])
+        state['long_ema'] = self._update_ema(price, state['long_ema'], state['long_multiplier'])
+        state['ema_history'].append((bar.timestamp, state['short_ema'], state['long_ema']))
+
         if previous_short is None or previous_long is None:
-            return
+            return 'HOLD'
 
         prev_diff = previous_short - previous_long
-        current_diff = self.short_ema - self.long_ema
+        current_diff = state['short_ema'] - state['long_ema']
 
-        if prev_diff <= 0 < current_diff and self.position != "long":
-            self.position = "long"
-            self._last_signal = "BUY"
-        elif prev_diff >= 0 > current_diff and self.position == "long":
-            self.position = "flat"
-            self._last_signal = "SELL"
+        if prev_diff <= 0 < current_diff and state['position'] != "long":
+            state['position'] = "long"
+            state['last_signal'] = "BUY"
+            return "BUY"
+        elif prev_diff >= 0 > current_diff and state['position'] == "long":
+            state['position'] = "flat"
+            state['last_signal'] = "SELL"
+            return "SELL"
 
-    def signal(self) -> Signal:
-        """Return the latest trading signal."""
-        return self._last_signal
+        return 'HOLD'
 
     @property
     def ema_history(self) -> List[tuple]:
         """Expose EMA values for testing and diagnostics."""
-        return list(self._ema_history)
+        return list(self.state['ema_history'])
 
 
 # Register in the global registry for discovery
