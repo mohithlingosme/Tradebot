@@ -137,3 +137,11 @@ class BackendSettings(BaseSettings):
 
 
 settings = BackendSettings()
+
+# Backwards compatibility for older imports
+Settings = BackendSettings
+
+
+def get_settings() -> BackendSettings:
+    """Return cached backend settings instance."""
+    return settings
