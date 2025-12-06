@@ -1,0 +1,66 @@
+# FILE: .github/workflows/lint.yml
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - paper
+  pull_request:
+    branches:
+      - main
+      - dev
+      - paper
+  workflow_dispatch:
+
+# Keep the default token scoped to read-only operations for safety
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Static analysis and formatting
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      # Prime the pip cache to avoid reinstalling common wheels
+      - name: Cache pip directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: lint-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt', 'setup.cfg') }}
+          restore-keys: |
+            lint-${{ runner.os }}-
+
+      # Install the lint tooling stack declared above
+      - name: Install lint tooling
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-dev.txt ]; then
+            python -m pip install -r requirements-dev.txt
+          fi
+          python -m pip install black flake8 ruff mypy
+
+      - name: Run Black (formatting)
+        run: black --check .
+
+      # Ruff performs ultra-fast linting checks
+      - name: Run Ruff (fast lint gate)
+        run: ruff check .
+
+      - name: Run Flake8
+        run: flake8 .
+
+      # Type checking provides additional safety nets for prod trading
+      - name: Run Mypy (type safety)
+        run: mypy .

@@ -1,0 +1,198 @@
+# FILE: .github/workflows/deploy.yml
+name: Deploy
+
+# Deploy automatically per branch or manually via workflow_dispatch
+on:
+  push:
+    branches:
+      - dev
+      - paper
+      - main
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Environment to deploy'
+        type: choice
+        default: dev
+        options:
+          - dev
+          - paper
+          - live
+      image_tag:
+        description: 'Override Docker image tag (optional)'
+        required: false
+        default: ''
+      confirm_live:
+        description: 'Type true to acknowledge the live trading checklist'
+        required: false
+        default: 'false'
+
+# Restrict token scope; only packages read is needed for GHCR pulls
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: Deploy ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ matrix.environment_name }}
+    needs: []
+    # Prevent overlapping deploys per environment so hosts stay in sync
+    concurrency:
+      group: finbot-deploy-${{ matrix.name }}
+      cancel-in-progress: false
+    if: |
+      (github.event_name == 'push' && github.ref == format('refs/heads/{0}', matrix.branch)) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == matrix.name)
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: dev
+            branch: dev
+            environment_name: dev
+            api_key: DEV_API_KEY
+            db_url: DEV_DB_URL
+            ssh_key_secret: SSH_KEY_DEV
+            deploy_host: ${{ vars.DEV_SSH_HOST }}
+            deploy_path: /opt/finbot/dev
+          - name: paper
+            branch: paper
+            environment_name: paper
+            api_key: PAPER_API_KEY
+            db_url: PAPER_DB_URL
+            ssh_key_secret: SSH_KEY_DEV
+            deploy_host: ${{ vars.PAPER_SSH_HOST }}
+            deploy_path: /opt/finbot/paper
+          - name: live
+            branch: main
+            environment_name: live
+            api_key: LIVE_API_KEY
+            db_url: LIVE_DB_URL
+            ssh_key_secret: SSH_KEY_LIVE
+            deploy_host: ${{ vars.LIVE_SSH_HOST }}
+            deploy_path: /opt/finbot/live
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Decide which immutable image tag each deployment should pull
+      - name: Resolve image tag
+        id: imagetag
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$REQUESTED_TAG" ]]; then
+            echo "tag=$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "${{ matrix.name }}" == "live" ]]; then
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Live trading safety checks
+        if: matrix.name == 'live'
+        env:
+          CONFIRM_LIVE: ${{ github.event.inputs.confirm_live }}
+        run: |
+          cat <<'MSG'
+          Live trading deployment checklist:
+          1. Confirm market hours / maintenance windows
+          2. Ensure risk/off switches are reachable
+          3. Validate strategy allocations for this release
+          MSG
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$CONFIRM_LIVE" != "true" ]]; then
+            echo "Live deployment aborted: confirm_live input must be true."
+            exit 1
+          fi
+          if [[ "${{ github.ref }}" != "refs/heads/main" && "$GITHUB_REF_TYPE" != "tag" ]]; then
+            echo "Live deployments must originate from main or a release tag."
+            exit 1
+          fi
+
+      # Allow this workflow to pull artifacts from GHCR on behalf of FinBot
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull release image
+        run: docker pull $IMAGE_NAME:${{ steps.imagetag.outputs.tag }}
+
+      # Save the container locally so we can ship it to the remote host via SSH
+      - name: Save Docker image for transfer
+        run: |
+          mkdir -p deploy
+          docker save $IMAGE_NAME:${{ steps.imagetag.outputs.tag }} -o deploy/finbot-image.tar
+
+      # Render environment-specific secrets into a runtime env file
+      - name: Prepare runtime environment file
+        env:
+          FINBOT_ENV: ${{ matrix.name }}
+          FINBOT_API_KEY: ${{ secrets[matrix.api_key] }}
+          DATABASE_URL: ${{ secrets[matrix.db_url] }}
+        run: |
+          cat > deploy/runtime.env.template <<'EOF'
+          FINBOT_ENV=${FINBOT_ENV}
+          FINBOT_API_KEY=${FINBOT_API_KEY}
+          DATABASE_URL=${DATABASE_URL}
+          EOF
+          envsubst < deploy/runtime.env.template > deploy/runtime.env
+          rm deploy/runtime.env.template
+
+      - name: Configure SSH agent
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets[matrix.ssh_key_secret] }}
+
+      # Add the remote deploy target to known_hosts to avoid prompt blocking
+      - name: Trust remote host
+        env:
+          DEPLOY_HOST: ${{ matrix.deploy_host }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Transfer bundle to target host
+        env:
+          DEPLOY_HOST: ${{ matrix.deploy_host }}
+          DEPLOY_PATH: ${{ matrix.deploy_path }}
+        run: |
+          ssh "$DEPLOY_HOST" "mkdir -p $DEPLOY_PATH"
+          scp deploy/runtime.env "$DEPLOY_HOST:$DEPLOY_PATH/.env"
+          scp deploy/finbot-image.tar "$DEPLOY_HOST:$DEPLOY_PATH/finbot-image.tar"
+
+      # Restart the remote FinBot service with the freshly pulled image
+      - name: Deploy container remotely
+        env:
+          DEPLOY_HOST: ${{ matrix.deploy_host }}
+          DEPLOY_PATH: ${{ matrix.deploy_path }}
+          IMAGE_TAG: ${{ steps.imagetag.outputs.tag }}
+        run: |
+          ssh "$DEPLOY_HOST" "IMAGE_NAME=$IMAGE_NAME IMAGE_TAG=$IMAGE_TAG DEPLOY_PATH=$DEPLOY_PATH ENV_NAME=${{ matrix.name }} bash -s" <<'EOSSH'
+          set -euo pipefail
+          docker load -i "$DEPLOY_PATH/finbot-image.tar"
+          CONTAINER_NAME="finbot-${ENV_NAME}"
+          docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+          docker run -d --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            --env-file "$DEPLOY_PATH/.env" \
+            "$IMAGE_NAME:$IMAGE_TAG"
+          EOSSH
+
+      - name: Clean up build artifacts
+        if: always()
+        run: rm -rf deploy

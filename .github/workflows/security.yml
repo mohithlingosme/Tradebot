@@ -1,0 +1,105 @@
+# FILE: .github/workflows/security.yml
+name: Security Scans
+
+# Continuous security guardrails on every change + nightly cadence
+on:
+  push:
+    branches:
+      - main
+      - dev
+      - paper
+  pull_request:
+    branches:
+      - main
+      - dev
+      - paper
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+# Workflows only need read access while auditing source/deps
+permissions:
+  contents: read
+
+jobs:
+  safety:
+    name: Dependency vulnerability scan (Safety)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      # Reuse virtualenv wheels for faster installs
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: security-safety-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            security-safety-${{ runner.os }}-
+
+      # Safety checks dependency manifests for known CVEs
+      - name: Install Safety
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install safety
+
+      - name: Run Safety against requirements
+        run: |
+          if [ -f requirements.txt ]; then
+            safety check -r requirements.txt --full-report
+          fi
+          if [ -f requirements-dev.txt ]; then
+            safety check -r requirements-dev.txt --full-report
+          fi
+
+  bandit:
+    name: Static security scan (Bandit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: security-bandit-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt') }}
+          restore-keys: |
+            security-bandit-${{ runner.os }}-
+
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit
+
+      - name: Run Bandit
+        run: bandit -r src -ll
+
+  secrets:
+    name: Secret leakage detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Scan commits for accidentally committed credentials
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: detect --source . --redact
