@@ -138,7 +138,7 @@ def verify_token(token: str) -> Optional[Dict]:
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict:
     """Dependency to get current authenticated user."""
     if not credentials:
-        raise HTTPException(status_code=403, detail="Authentication credentials are required")
+        raise HTTPException(status_code=401, detail="Not authenticated")
     token = credentials.credentials
     payload = verify_token(token)
     username = payload.get("sub")
@@ -166,5 +166,5 @@ def get_current_admin_user(current_user: Dict = Depends(get_current_user)) -> Di
     """Dependency that ensures the requester has admin role."""
     role = current_user.get("role") or getattr(current_user.get("user"), "role", None)
     if role != "admin":
-        raise HTTPException(status_code=403, detail="Admin privileges required")
+        raise HTTPException(status_code=403, detail="Admin access required")
     return current_user

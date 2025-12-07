@@ -25,13 +25,13 @@ def temp_db():
 
 
 @pytest.fixture
-async def storage(temp_db):
-    """Create and initialize storage instance."""
+def storage(temp_db, event_loop):
+    """Create and initialize storage instance using the shared event loop."""
     storage = DataStorage(temp_db)
-    await storage.connect()
-    await storage.create_tables()
+    event_loop.run_until_complete(storage.connect())
+    event_loop.run_until_complete(storage.create_tables())
     yield storage
-    await storage.disconnect()
+    event_loop.run_until_complete(storage.disconnect())
 
 
 class TestDataStorage:
@@ -234,4 +234,3 @@ class TestDataStorage:
         # but we can verify by trying to use it (should raise error)
         with pytest.raises(Exception):
             await storage.conn.execute("SELECT 1")
-

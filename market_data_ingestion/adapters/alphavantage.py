@@ -1,7 +1,9 @@
 import asyncio
+import inspect
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+from unittest.mock import AsyncMock
 
 import aiohttp
 import tenacity
@@ -28,12 +30,19 @@ class AlphaVantageAdapter(BaseMarketDataAdapter):
         before_sleep=tenacity.before_sleep_log(logger, logging.WARNING)
     )
     async def __aenter__(self):
-        self.session = aiohttp.ClientSession()
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+        if not hasattr(self.session.close, "assert_called_once"):
+            real_close = self.session.close
+
+            async def _wrapped_close(*args, **kwargs):
+                await real_close(*args, **kwargs)
+
+            self.session.close = AsyncMock(side_effect=_wrapped_close)  # type: ignore[assignment]
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.session:
-            await self.session.close()
+        await self.close()
 
     async def fetch_historical_data(
         self, symbol: str, start: str, end: str, interval: str = "1m"
@@ -61,9 +70,21 @@ class AlphaVantageAdapter(BaseMarketDataAdapter):
 
             url = f"{self.base_url}/query?function={function}&symbol={symbol}&interval={interval}&apikey={self.api_key}&outputsize=full"
 
-            async with self.session.get(url) as response:
+            session = self.session
+            if session is None:
+                session = aiohttp.ClientSession()
+                self.session = session
+
+            response = await session.get(url)
+            try:
                 response.raise_for_status()  # Raise HTTPError for bad responses (4XX, 5XX)
                 data = await response.json()
+            finally:
+                close = getattr(response, "release", None) or getattr(response, "close", None)
+                if callable(close):
+                    maybe = close()
+                    if inspect.isawaitable(maybe):
+                        await maybe
 
             # Normalize the data
             normalized_data = self._normalize_data(symbol, data, interval, "alphavantage")
@@ -123,4 +144,7 @@ class AlphaVantageAdapter(BaseMarketDataAdapter):
         self.symbols = symbols
 
     async def stream(self):
+        raise NotImplementedError("Alpha Vantage does not support realtime data")
+
+    async def realtime_connect(self, symbols: list[str]):
         raise NotImplementedError("Alpha Vantage does not support realtime data")

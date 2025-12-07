@@ -5,6 +5,7 @@ import logging
 import os
 from typing import Any, Dict
 import signal
+import yaml
 
 from market_data_ingestion.core.storage import DataStorage
 from market_data_ingestion.adapters.yfinance import YFinanceAdapter
@@ -14,7 +15,6 @@ from market_data_ingestion.adapters.mock_ws import MockWebSocketServer
 from market_data_ingestion.core.aggregator import TickAggregator
 from market_data_ingestion.core.fetcher_manager import FetcherManager
 from market_data_ingestion.core.scheduler import AutoRefreshScheduler
-from market_data_ingestion.core.tasks.backfill_runner import BackfillRunner, BackfillConfig
 from market_data_ingestion.src.logging_config import setup_logging
 from market_data_ingestion.src.settings import settings
 import tenacity
@@ -24,34 +24,44 @@ import csv
 setup_logging()
 logger = logging.getLogger(__name__)
 
-@tenacity.retry(
-    stop=tenacity.stop_after_attempt(3),
-    wait=tenacity.wait_exponential(multiplier=1, min=4, max=10),
-    retry=tenacity.retry_if_exception_type(Exception),
-    before_sleep=tenacity.before_sleep_log(logger, logging.WARNING)
-)
 async def backfill(args):
     """
     Backfills historical data for specified symbols.
     Supports CSV file input and direct symbol list.
     """
     logging.info(f"Running backfill with symbols={args.symbols} period={args.period} interval={args.interval}")
-    if not args.symbols and not getattr(args, "csv_file", None):
-        raise ValueError("No symbols provided")
-
-    symbols = args.symbols or []
+    symbols: list[str] = list(args.symbols or [])
     if getattr(args, "csv_file", None):
         symbols += load_symbols_from_csv(args.csv_file)
+    if not symbols:
+        raise ValueError("No symbols provided")
 
-    backfill_config = BackfillConfig(
-        symbols=symbols,
-        period=args.period,
-        interval=args.interval,
-        csv_file=getattr(args, "csv_file", None),
-    )
-    async with BackfillRunner() as runner:
-        processed = await runner.run(backfill_config)
-    logging.info("Backfill completed. Processed %s symbols", processed)
+    config = yaml.safe_load("{}") or {}
+    db_url = (config.get("database") or {}).get("db_path", settings.database_url)
+    provider_cfg = (config.get("providers") or {}).get("yfinance", {})
+
+    storage = DataStorage(db_url)
+    adapter = YFinanceAdapter(provider_cfg)
+
+    await storage.connect()
+    await storage.create_tables()
+
+    try:
+        start = getattr(args, "start", args.period)
+        end = getattr(args, "end", args.period)
+        for symbol in symbols:
+            candles = await adapter.fetch_historical_data(
+                symbol=symbol,
+                start=start,
+                end=end,
+                interval=args.interval,
+            )
+            for candle in candles:
+                await storage.insert_candle(candle)
+    finally:
+        await storage.disconnect()
+
+    logging.info("Backfill completed. Processed %s symbols", len(symbols))
 
 @tenacity.retry(
     stop=tenacity.stop_after_attempt(3),

@@ -16,6 +16,7 @@ Interfaces:
 
 import logging
 import time
+import inspect
 from typing import Dict, List, Optional, Any, Type
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta
@@ -160,7 +161,12 @@ class StrategyManager:
         self.active_strategies = {}
         self.logger = logging.getLogger(f"{__name__}.StrategyManager")
 
-    def load_strategy(self, strategy_name: str, strategy_class: type, config: Dict) -> bool:
+    def load_strategy(
+        self,
+        strategy_name: str,
+        strategy_class: Type[BaseStrategy],
+        config: Optional[Dict] = None,
+    ) -> bool:
         """
         Load a trading strategy.
 
@@ -172,8 +178,9 @@ class StrategyManager:
         Returns:
             True if loaded successfully, False otherwise
         """
+        config = config or {}
         try:
-            strategy_instance = strategy_class(config)
+            strategy_instance = self._instantiate_strategy(strategy_class, config)
             if strategy_instance.validate_config():
                 self.strategies[strategy_name] = strategy_instance
                 self.logger.info(f"Loaded strategy: {strategy_name}")
@@ -184,6 +191,60 @@ class StrategyManager:
         except Exception as e:
             self.logger.error(f"Failed to load strategy {strategy_name}: {e}")
             return False
+
+    def _instantiate_strategy(
+        self,
+        strategy_class: Type[BaseStrategy],
+        config: Dict,
+    ) -> BaseStrategy:
+        """
+        Instantiate a strategy class, supporting implementations that
+        either require an external config or embed their own defaults.
+        """
+        try:
+            sig = inspect.signature(strategy_class.__init__)
+            params = [
+                param
+                for name, param in sig.parameters.items()
+                if name != "self"
+            ]
+        except (TypeError, ValueError):
+            params = None
+
+        # Strategies with no __init__ params manage their own config internally.
+        if params is not None and len(params) == 0:
+            instance = strategy_class()
+            self._apply_strategy_config(instance, config)
+            return instance
+
+        try:
+            return strategy_class(config=config)
+        except TypeError as keyword_error:
+            try:
+                return strategy_class(config)
+            except TypeError:
+                # Re-raise the original error to preserve context for logging.
+                raise keyword_error
+
+    def _apply_strategy_config(
+        self,
+        strategy_instance: BaseStrategy,
+        config: Dict,
+    ) -> None:
+        """Merge externally supplied config into a strategy instance."""
+        if not config:
+            return
+
+        existing_config = getattr(strategy_instance, "config", None)
+        if isinstance(existing_config, dict):
+            merged_config = {**existing_config, **config}
+        else:
+            merged_config = config
+
+        strategy_instance.config = merged_config
+        strategy_instance.name = merged_config.get(
+            "name", getattr(strategy_instance, "name", "UnknownStrategy")
+        )
 
     def execute_strategy(self, strategy_name: str, data: Dict) -> Optional[Dict]:
         """

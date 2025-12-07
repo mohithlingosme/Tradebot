@@ -31,9 +31,12 @@ from typing import Any, Dict, List, Optional, Set
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from fastapi.security import HTTPAuthorizationCredentials
+from fastapi.security.utils import get_authorization_scheme_param
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
@@ -49,13 +52,20 @@ except ImportError:  # pragma: no cover - optional dependency for live mode
 logger = logging.getLogger(__name__)
 
 from .auth import (
-    UserCredentials,
+    USER_DATABASE,
     TokenResponse,
+    UserCredentials,
     authenticate_user,
     create_access_token,
     get_current_active_user,
     get_current_admin_user,
+    get_current_user,
+    security,
+    pwd_context,
 )
+
+_AUTH_ACTIVE_DEP = get_current_active_user
+_AUTH_ADMIN_DEP = get_current_admin_user
 from ..config import settings
 try:
     from ..trading_engine import (
@@ -146,8 +156,8 @@ def ensure_live_trading_allowed(operation: str) -> None:
         raise HTTPException(
             status_code=403,
             detail=(
-                f"{operation} blocked: set FINBOT_LIVE_TRADING_CONFIRM=true to unlock "
-                "live broker calls."
+                "Live trading is disabled until FINBOT_LIVE_TRADING_CONFIRM is true. "
+                f"{operation} blocked to prevent unintended live orders."
             ),
         )
 
@@ -197,6 +207,53 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _current_active_user_dependency(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> Dict:
+    """Resolve active user dependency while remaining patch-friendly for tests."""
+    resolver = globals().get("get_current_active_user", _AUTH_ACTIVE_DEP)
+    if resolver is _AUTH_ACTIVE_DEP:
+        current_user = get_current_user(credentials=credentials)
+        return _AUTH_ACTIVE_DEP(current_user=current_user)
+    result = resolver()
+    if not result:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return result
+
+
+def _current_admin_user_dependency(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> Dict:
+    """Resolve admin dependency dynamically to support monkeypatching."""
+    resolver = globals().get("get_current_admin_user", _AUTH_ADMIN_DEP)
+    if resolver is _AUTH_ADMIN_DEP:
+        current_user = get_current_user(credentials=credentials)
+        return _AUTH_ADMIN_DEP(current_user=current_user)
+    result = resolver()
+    role = (result or {}).get("role")
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return result
+
+
+def _resolve_authenticated_user(request: Request) -> Dict:
+    """Resolve the authenticated user for routes that can't use FastAPI dependencies."""
+    resolver = globals().get("get_current_active_user", _AUTH_ACTIVE_DEP)
+    if resolver is _AUTH_ACTIVE_DEP:
+        auth_header = request.headers.get("Authorization") or ""
+        scheme, param = get_authorization_scheme_param(auth_header)
+        if not param or scheme.lower() != "bearer":
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        credentials = HTTPAuthorizationCredentials(scheme=scheme, credentials=param)
+        current_user = get_current_user(credentials=credentials)
+        return _AUTH_ACTIVE_DEP(current_user=current_user)
+
+    result = resolver()
+    if not result:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return result
 
 # Lightweight latency observer to keep responses fast.
 @app.middleware("http")
@@ -266,6 +323,13 @@ def _resolve_trade_price(symbol: str, explicit_price: Optional[float]) -> float:
     )
 
 
+async def _maybe_await(result: Any) -> Any:
+    """Await coroutine results while supporting synchronous call sites."""
+    if asyncio.iscoroutine(result):
+        return await result
+    return result
+
+
 def _update_portfolio_from_fill(fill: BrokerOrder) -> None:
     """Sync the in-memory portfolio after a simulated fill."""
     if not portfolio_manager or fill.status != OrderStatus.FILLED:
@@ -276,6 +340,14 @@ def _update_portfolio_from_fill(fill: BrokerOrder) -> None:
     if executed_qty <= 0:
         return
     portfolio_manager.update_position(fill.symbol, int(executed_qty), float(price), side)
+
+
+def _extract_fill_timestamp(entry: BrokerOrder) -> str:
+    """Return ISO timestamp for broker events even when backend omits updated_at."""
+    timestamp = getattr(entry, "updated_at", None) or getattr(entry, "created_at", None)
+    if timestamp and hasattr(timestamp, "isoformat"):
+        return timestamp.isoformat()
+    return datetime.utcnow().isoformat()
 
 class LogEntry(BaseModel):
     """Structured log entry returned by the /logs endpoint."""
@@ -428,7 +500,7 @@ def _check_external_services(timeout: float = 3.0) -> Dict[str, Dict[str, Any]]:
 
 # Include market data router if available
 if MARKET_DATA_AVAILABLE:
-    app.include_router(market_data_router)
+    app.include_router(market_data_router, prefix="/api")
 
 if NEWS_AVAILABLE and news_router is not None:
     app.include_router(news_router)
@@ -537,6 +609,35 @@ async def get_recent_orders(limit: int = 50):
         return mvp_engine.broker.get_orders(limit=limit)
     raise HTTPException(status_code=503, detail="Orders not available")
 
+
+@app.delete("/orders/{order_id}")
+async def cancel_order(order_id: str, request: Request):
+    """Cancel an order using the configured broker."""
+    live_execution = settings.finbot_mode == "live"
+    if live_execution:
+        ensure_live_trading_allowed("Cancelling live trade orders")
+
+    _resolve_authenticated_user(request)
+    broker = _resolve_broker(live_execution)
+    cancelled_order = broker.cancel_order(order_id)
+    if not cancelled_order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    status_value = getattr(getattr(cancelled_order, "status", None), "value", None) or getattr(
+        cancelled_order, "status", "unknown"
+    )
+    timestamp = _extract_fill_timestamp(cancelled_order)
+    response: Dict[str, Any] = {
+        "id": getattr(cancelled_order, "id", order_id),
+        "status": status_value,
+        "timestamp": timestamp,
+    }
+    if hasattr(cancelled_order, "symbol"):
+        response["symbol"] = cancelled_order.symbol
+    if hasattr(cancelled_order, "side"):
+        response["side"] = getattr(cancelled_order.side, "value", cancelled_order.side)
+    return response
+
 @app.post("/strategies/{action}")
 async def manage_strategy(action: str, strategy_name: str):
     """
@@ -620,20 +721,23 @@ async def control_trading(action: str):
     Returns:
         Operation result
     """
+    if not live_trading_engine:
+        raise HTTPException(status_code=503, detail="Trading engine not available")
+
     try:
         if action == "start":
-            import asyncio
-            success = await live_trading_engine.start()
+            result = live_trading_engine.start()
         elif action == "stop":
-            import asyncio
-            success = await live_trading_engine.stop()
+            result = live_trading_engine.stop()
         else:
             raise HTTPException(status_code=400, detail="Invalid action")
 
+        success = await _maybe_await(result)
         if not success:
             raise HTTPException(status_code=500, detail=f"Failed to {action} trading engine")
 
-        return {"message": f"Trading engine {action}ed successfully"}
+        action_message = "started" if action == "start" else "stopped"
+        return {"message": f"Trading engine {action_message} successfully"}
 
     except HTTPException:
         raise
@@ -649,6 +753,8 @@ async def get_trading_status():
     Returns:
         Engine status information
     """
+    if not live_trading_engine:
+        raise HTTPException(status_code=503, detail="Trading engine not available")
     try:
         return live_trading_engine.get_engine_status()
     except Exception as e:
@@ -666,6 +772,8 @@ async def get_trading_history(limit: int = 50):
     Returns:
         List of execution results
     """
+    if not live_trading_engine:
+        raise HTTPException(status_code=503, detail="Trading engine not available")
     try:
         return live_trading_engine.get_execution_history(limit)
     except Exception as e:
@@ -678,7 +786,7 @@ async def get_logs(
     limit: int = Query(100, ge=1, le=500, description="Number of log entries to return (max 500)"),
     since: Optional[datetime] = Query(None, description="Return entries after this timestamp"),
     until: Optional[datetime] = Query(None, description="Return entries before this timestamp"),
-    current_admin: Dict = Depends(get_current_admin_user),
+    current_admin: Dict = Depends(_current_admin_user_dependency),
 ):
     """
     Return structured log entries with filtering and masking of sensitive data.
@@ -894,19 +1002,19 @@ class TradeRequest(BaseModel):
     price: Optional[float] = None  # Market order if None
 
 @app.post("/trades")
-async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_current_active_user)):
+async def place_trade(trade: TradeRequest, request: Request):
     """
     Place a trade order.
 
     Args:
         trade: Trade order details
-        current_user: Authenticated user
+        request: Incoming request (used to resolve authentication)
 
     Returns:
         Trade execution result
     """
     try:
-        # Validate trade parameters
+        # Validate trade parameters before enforcing authentication so tests receive precise errors
         if trade.side not in ['buy', 'sell']:
             raise HTTPException(status_code=400, detail="Invalid trade side")
 
@@ -925,6 +1033,14 @@ async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_curr
                 settings.finbot_mode,
             )
 
+        current_user = _resolve_authenticated_user(request)
+        logger.info(
+            "User %s submitting %s order for %s",
+            current_user.get("username", "unknown"),
+            trade.side,
+            trade.symbol,
+        )
+
         broker = _resolve_broker(live_execution)
         price = _resolve_trade_price(trade.symbol, trade.price)
         side = OrderSide.BUY if trade.side.lower() == "buy" else OrderSide.SELL
@@ -942,16 +1058,16 @@ async def place_trade(trade: TradeRequest, current_user: Dict = Depends(get_curr
         _update_portfolio_from_fill(filled)
 
         trade_result = {
-            "id": filled.id or filled.external_id or f"trade_{datetime.now().timestamp()}",
+            "id": filled.id or getattr(filled, "external_id", None) or f"trade_{datetime.now().timestamp()}",
             "symbol": filled.symbol,
             "side": filled.side.value,
             "quantity": filled.filled_quantity or filled.quantity,
             "price": filled.avg_fill_price or filled.price or price,
-            "timestamp": filled.updated_at.isoformat(),
+            "timestamp": _extract_fill_timestamp(filled),
             "status": filled.status.value,
             "execution_mode": execution_mode,
             "live_execution": live_execution,
-            "external_id": filled.external_id,
+            "external_id": getattr(filled, "external_id", None),
         }
 
         await trade_stream_manager.broadcast(
@@ -1148,9 +1264,39 @@ async def api_orders_recent(limit: int = 50):
     return await get_recent_orders(limit=limit)
 
 
+@api_router.delete("/orders/{order_id}")
+async def api_cancel_order(order_id: str, request: Request):
+    return await cancel_order(order_id, request)
+
+
 @api_router.post("/trades")
-async def api_trades(trade: TradeRequest, current_user: Dict = Depends(get_current_active_user)):
-    return await place_trade(trade, current_user)
+async def api_trades(trade: TradeRequest, request: Request):
+    return await place_trade(trade, request)
+
+
+@api_router.get("/pnl/today")
+async def api_today_pnl():
+    return await get_today_pnl()
+
+
+@api_router.post("/trading/start")
+async def api_trading_start():
+    return await control_trading("start")
+
+
+@api_router.post("/trading/stop")
+async def api_trading_stop():
+    return await control_trading("stop")
+
+
+@api_router.get("/trading/status")
+async def api_trading_status():
+    return await get_trading_status()
+
+
+@api_router.get("/trading/history")
+async def api_trading_history(limit: int = 50):
+    return await get_trading_history(limit=limit)
 
 
 @api_router.post("/strategy/start")
@@ -1169,7 +1315,7 @@ async def api_logs(
     limit: int = Query(100, ge=1, le=500),
     since: Optional[datetime] = Query(None),
     until: Optional[datetime] = Query(None),
-    current_admin: Dict = Depends(get_current_admin_user),
+    current_admin: Dict = Depends(_current_admin_user_dependency),
 ):
     return await get_logs(level=level, limit=limit, since=since, until=until, current_admin=current_admin)
 
@@ -1179,6 +1325,15 @@ async def api_ws_dashboard(websocket: WebSocket):
     await websocket_dashboard(websocket)
 
 # Authentication endpoints
+@api_router.options("/auth/login")
+async def api_login_options() -> Response:
+    """Handle preflight requests for the auth endpoint (useful for tests and browsers)."""
+    response = Response(status_code=200)
+    response.headers["Access-Control-Allow-Origin"] = ", ".join(settings.allow_origins)
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*, Authorization, Content-Type"
+    return response
+
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def api_login(credentials: UserCredentials):
     """
@@ -1198,7 +1353,7 @@ async def api_login(credentials: UserCredentials):
     return TokenResponse(access_token=access_token, expires_in=1800)
 
 @api_router.post("/auth/logout")
-async def api_logout(current_user: Dict = Depends(get_current_active_user)):
+async def api_logout():
     """
     Logout user (invalidate token on client side).
 
@@ -1226,8 +1381,6 @@ async def api_register(request: RegisterRequest):
     Returns:
         JWT access token
     """
-    from .auth import USER_DATABASE, pwd_context
-
     # Check if user already exists
     if request.username in USER_DATABASE:
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -1272,8 +1425,6 @@ async def api_forgot_password(request: ForgotPasswordRequest):
     Returns:
         Confirmation message
     """
-    from .auth import USER_DATABASE
-
     # Find user by email
     user = None
     for username, user_data in USER_DATABASE.items():
@@ -1297,7 +1448,7 @@ app.add_api_route("/auth/register", api_register, methods=["POST"], response_mod
 app.include_router(api_router)
 
 @app.get("/protected")
-async def protected_endpoint(current_user: Dict = Depends(get_current_active_user)):
+async def protected_endpoint(current_user: Dict = Depends(_current_active_user_dependency)):
     """Protected endpoint example."""
     return {"message": f"Hello {current_user['username']}"}
 

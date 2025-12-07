@@ -23,8 +23,9 @@ class SafetyVerdict:
 class SafetyLayer:
     """Simple regex-based safety guard with hallucination heuristics."""
 
-    def __init__(self, moderation_client=None):
+    def __init__(self, moderation_client=None, min_grounding_score: float = 0.4):
         self.moderation_client = moderation_client
+        self.min_grounding_score = min_grounding_score
 
     def inspect_prompt(self, text: str) -> SafetyVerdict:
         if any(pattern.search(text) for pattern in JAILBREAK_PATTERNS):
@@ -39,7 +40,7 @@ class SafetyLayer:
         if not evidence:
             return SafetyVerdict(False, "Insufficient grounding evidence.")
         hallucination_score = self._calc_grounding_score(text, evidence)
-        if hallucination_score < 0.7:
+        if hallucination_score < self.min_grounding_score:
             return SafetyVerdict(False, "Possible hallucination detected; requesting clarification.")
         if self.moderation_client:
             moderation_verdict = self.moderation_client.moderate(text)

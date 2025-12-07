@@ -116,12 +116,16 @@ class FeatureBuilder:
 
         prices = prices.sort_values(["symbol", "date"])
         grouped = prices.groupby("symbol")
-        prices["return_1d"] = grouped["close"].pct_change()
-        prices["return_5d"] = grouped["close"].pct_change(periods=5)
-        prices["volatility_10d"] = grouped["close"].pct_change().rolling(10).std()
-        prices["ma_5"] = grouped["close"].rolling(window=5, min_periods=3).mean()
-        prices["ma_20"] = grouped["close"].rolling(window=20, min_periods=10).mean()
-        prices["future_return_5d"] = grouped["close"].pct_change(periods=5).shift(-5)
+        close = grouped["close"]
+
+        prices["return_1d"] = close.pct_change()
+        prices["return_5d"] = close.pct_change(periods=5)
+        prices["volatility_10d"] = close.transform(
+            lambda series: series.pct_change().rolling(window=10, min_periods=5).std()
+        )
+        prices["ma_5"] = close.transform(lambda series: series.rolling(window=5, min_periods=3).mean())
+        prices["ma_20"] = close.transform(lambda series: series.rolling(window=20, min_periods=10).mean())
+        prices["future_return_5d"] = close.transform(lambda series: series.pct_change(periods=5).shift(-5))
         return prices
 
     @staticmethod
@@ -172,7 +176,7 @@ class FeatureBuilder:
             return df, {"mean": [], "scale": [], "features": list(feature_cols)}
 
         scaler = StandardScaler()
-        filled = df[feature_cols].apply(pd.to_numeric, errors="coerce").fillna(method="ffill").fillna(0.0)
+        filled = df[feature_cols].apply(pd.to_numeric, errors="coerce").ffill().fillna(0.0)
         scaled = scaler.fit_transform(filled)
         norm_cols = [f"norm_{col}" for col in feature_cols]
         df_norm = df.copy()

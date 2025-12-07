@@ -159,17 +159,16 @@ class RiskManager:
         if not self.can_open_new_position(state, order):
             return False, "Max open positions reached; cannot open new trades"
 
-        # Risk-per-trade check
-        max_risk_amount, potential_risk = self._risk_amount_for_order(state, order)
-        if potential_risk is not None and potential_risk > max_risk_amount:
-            return False, f"Risk per trade exceeds limit: {potential_risk:.2f} > {max_risk_amount:.2f}"
-
-        # Margin check
+        # Margin check first so lack of buying power is reported clearly
         required_margin = self.margin_calculator.required_margin(order)
         available_margin = state.available_margin if state.available_margin is not None else state.equity
         available_cap = available_margin * self.limits.max_margin_utilization_pct
         if required_margin > available_cap:
             return False, f"Insufficient margin: required {required_margin:.2f}, available {available_cap:.2f}"
 
-        return True, "Order within risk limits"
+        # Risk-per-trade check
+        max_risk_amount, potential_risk = self._risk_amount_for_order(state, order)
+        if potential_risk is not None and potential_risk > max_risk_amount:
+            return False, f"Risk per trade exceeds limit: {potential_risk:.2f} > {max_risk_amount:.2f}"
 
+        return True, "Order within risk limits"

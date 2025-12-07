@@ -14,7 +14,13 @@ import argparse
 import asyncio
 import logging
 import os
+from pathlib import Path
 from typing import Iterable
+
+try:
+    from common.env import get_mode as _get_env_mode
+except Exception:  # pragma: no cover - fallback when package layout changes
+    _get_env_mode = None
 
 DEFAULT_LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
@@ -30,7 +36,41 @@ def configure_logging() -> None:
 
 def get_mode() -> str:
     """Return the active mode (dev/paper/live) with a safe default."""
-    return os.getenv("FINBOT_MODE", "dev").lower()
+    if _get_env_mode:
+        try:
+            return _get_env_mode()
+        except ValueError:
+            return "dev"
+    return os.getenv("FINBOT_MODE", "dev").strip().lower()
+
+
+def read_env_file(env_path: Path) -> dict[str, str]:
+    """Parse KEY=VALUE lines from a .env-style file."""
+    env: dict[str, str] = {}
+    try:
+        content = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return env
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        env[key.strip()] = value.strip()
+    return env
+
+
+def load_mode_env(mode: str | None = None, base_dir: Path | None = None) -> dict[str, str]:
+    """Load .env.<mode> into os.environ without overriding explicit env vars."""
+    target_mode = (mode or get_mode() or "dev").lower()
+    env_dir = base_dir or Path.cwd()
+    env_file = env_dir / f".env.{target_mode}"
+    values = read_env_file(env_file)
+    for key, value in values.items():
+        if key not in os.environ:
+            os.environ[key] = value
+    return values
 
 
 def _format_symbols(symbols: Iterable[str]) -> str:

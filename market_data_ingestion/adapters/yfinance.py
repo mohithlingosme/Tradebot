@@ -95,3 +95,6 @@ class YFinanceAdapter(BaseMarketDataAdapter):
 
     async def stream(self):
         raise NotImplementedError("yfinance does not support realtime data")
+
+    async def realtime_connect(self, symbols: list[str]):
+        raise NotImplementedError("yfinance does not support realtime data")

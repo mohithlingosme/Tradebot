@@ -1,0 +1,195 @@
+Pytest run summary:
+- `pytest tests/unit -q`
+- `pytest tests/risk -q`
+- `pytest tests/strategies -q`
+- `pytest tests/test_env_modes.py -q`
+
+All passing. Remaining failures are limited to API-heavy integration suites listed below.
+
+Failing / error test cases:
+FAILED tests/backend/test_auth_routes.py::test_protected_endpoint_requires_auth
+FAILED tests/backend/test_auth_routes.py::test_protected_endpoint_with_valid_token
+FAILED tests/backend/test_auth_routes.py::test_admin_only_endpoint_requires_admin_role
+FAILED tests/backend/test_auth_routes.py::test_auth_endpoints_cors_headers - ...
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_ohlc - ...
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_ohlc_invalid_symbol
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_ohlc_with_date_range
+FAILED tests/backend/test_market_data_routes.py::test_get_current_price - Att...
+FAILED tests/backend/test_market_data_routes.py::test_get_current_price_not_found
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_quote
+FAILED tests/backend/test_market_data_routes.py::test_get_market_depth - Attr...
+FAILED tests/backend/test_market_data_routes.py::test_get_historical_volume
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_with_pagination
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_invalid_timeframe
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_rate_limiting
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_caching
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_error_handling
+FAILED tests/backend/test_market_data_routes.py::test_get_market_data_empty_response
+FAILED tests/backend/test_trading_routes.py::test_place_buy_order_success - a...
+FAILED tests/backend/test_trading_routes.py::test_place_sell_order_success - ...
+FAILED tests/backend/test_trading_routes.py::test_place_market_order - assert...
+FAILED tests/backend/test_trading_routes.py::test_place_order_invalid_side - ...
+FAILED tests/backend/test_trading_routes.py::test_place_order_invalid_quantity
+FAILED tests/backend/test_trading_routes.py::test_place_order_live_mode_blocked_without_confirmation
+FAILED tests/backend/test_trading_routes.py::test_cancel_order_success - asse...
+FAILED tests/backend/test_trading_routes.py::test_cancel_order_not_found - As...
+FAILED tests/backend/test_trading_routes.py::test_get_pnl_today - assert 404 ...
+FAILED tests/backend/test_trading_routes.py::test_start_trading_engine - asse...
+FAILED tests/backend/test_trading_routes.py::test_stop_trading_engine - asser...
+FAILED tests/backend/test_trading_routes.py::test_get_trading_status - assert...
+FAILED tests/backend/test_trading_routes.py::test_get_trading_history - asser...
+FAILED tests/backend/test_trading_routes.py::test_place_order_unauthenticated
+FAILED tests/data_collector/test_backfill_scripts.py::test_nse_backfill_script_success
+FAILED tests/data_collector/test_backfill_scripts.py::test_nse_backfill_with_date_range
+FAILED tests/data_collector/test_backfill_scripts.py::test_bse_backfill_script_success
+FAILED tests/data_collector/test_backfill_scripts.py::test_mcx_backfill_script_success
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_error_handling
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_invalid_dates
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_rate_limiting
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_data_validation
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_progress_reporting
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_config_loading
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_output_formats
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_dry_run_mode
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_symbol_filtering
+FAILED tests/data_collector/test_backfill_scripts.py::test_backfill_script_parallel_processing
+FAILED tests/data_collector/test_mock_feeds.py::test_mock_websocket_server_emits_ticks
+FAILED tests/integration/test_api_auth.py::TestAPIAuthentication::test_logout_unauthenticated
+FAILED tests/integration/test_api_auth.py::TestProtectedEndpoints::test_place_trade_authenticated
+FAILED tests/integration/test_api_auth.py::TestProtectedEndpoints::test_place_trade_no_auth
+FAILED tests/integration/test_api_auth.py::TestProtectedEndpoints::test_protected_endpoint_authenticated
+FAILED tests/integration/test_api_auth.py::TestProtectedEndpoints::test_protected_endpoint_invalid_token
+FAILED tests/integration/test_api_auth.py::TestProtectedEndpoints::test_protected_endpoint_no_auth
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_health_endpoint
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_logs_endpoint_forbidden_for_non_admin
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_logs_endpoint_no_file
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_logs_endpoint_requires_auth
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_logs_endpoint_with_file
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_metrics_endpoint
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_root_endpoint
+FAILED tests/integration/test_api_auth.py::TestPublicEndpoints::test_status_endpoint
+FAILED tests/integration/test_api_auth.py::TestStrategyEndpoints::test_get_strategies
+FAILED tests/integration/test_api_auth.py::TestStrategyEndpoints::test_load_strategy_invalid_class
+FAILED tests/integration/test_api_auth.py::TestStrategyEndpoints::test_manage_strategy_invalid_action
+FAILED tests/integration/test_api_auth.py::TestTradingEndpoints::test_control_trading_invalid_action
+FAILED tests/integration/test_api_auth.py::TestTradingEndpoints::test_get_trading_history
+FAILED tests/integration/test_api_auth.py::TestTradingEndpoints::test_get_trading_status
+FAILED tests/integration/test_api_endpoints.py::TestMetricsEndpoint::test_get_metrics_success
+FAILED tests/integration/test_api_endpoints.py::TestHealthEndpoints::test_ready_check
+FAILED tests/integration/test_api_endpoints.py::TestSymbolsEndpoint::test_get_symbols
+FAILED tests/integration/test_health_and_metrics_stack.py::test_backend_metrics_endpoint_includes_components
+FAILED tests/market_data_ingestion/test_backfill_cli.py::test_backfill_api_command_executes
+FAILED tests/market_data_ingestion/test_backfill_cli.py::test_backfill_csv_command_ingests
+FAILED tests/market_data_ingestion/test_backfill_cli.py::test_replay_dlq_command_invokes_handler
+FAILED tests/market_data_ingestion/test_bar_builders.py::test_candle_aggregator_emits_payload_for_each_interval
+FAILED tests/market_data_ingestion/test_bar_builders.py::test_tick_aggregator_flushes_all_intervals
+FAILED tests/market_data_ingestion/test_source_adapters_mcxticks.py::test_kite_adapter_normalizes_ticks
+FAILED tests/market_data_ingestion/test_source_adapters_mcxticks.py::test_process_message_returns_none_for_invalid_json
+FAILED tests/market_data_ingestion/test_source_adapters_mcxticks.py::test_process_message_uses_normalizer
+FAILED tests/risk/test_var_and_drawdown.py::test_can_open_trade_respects_risk_per_trade
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_backend_entrypoint
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_ingestion_entrypoint
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_engine_entrypoint
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_with_config_file
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_environment_variables
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_shutdown_signal_handling
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_process_monitoring
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_log_file_output
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_multiple_services
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_dependency_check
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_dependency_failure
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_health_check
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_health_check_timeout
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_reload_on_file_change
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_debug_mode - A...
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_profile_mode
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_with_custom_python_path
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_service_discovery
+FAILED tests/scripts/test_dev_run_entrypoints.py::test_dev_run_cleanup_on_exit
+FAILED tests/strategies/regression/test_ema_crossover_regression.py::test_regression_triggers_buy_then_flat
+FAILED tests/strategies/test_risk_overrides.py::test_validate_order_rejects_when_margin_missing
+FAILED tests/test_api_market_data.py::TestHealthEndpoints::test_health_check
+FAILED tests/test_api_market_data.py::TestHealthEndpoints::test_healthz_alias
+FAILED tests/test_api_market_data.py::TestHealthEndpoints::test_readiness_check_success
+FAILED tests/test_api_market_data.py::TestHealthEndpoints::test_readiness_check_failure
+FAILED tests/test_api_market_data.py::TestHealthEndpoints::test_readyz_alias
+FAILED tests/test_api_market_data.py::TestMetricsEndpoint::test_get_metrics
+FAILED tests/test_api_market_data.py::TestCandlesEndpoint::test_get_candles_success
+FAILED tests/test_api_market_data.py::TestCandlesEndpoint::test_get_candles_no_data
+FAILED tests/test_api_market_data.py::TestCandlesEndpoint::test_get_candles_missing_symbol
+FAILED tests/test_api_market_data.py::TestCandlesEndpoint::test_get_candles_invalid_limit
+FAILED tests/test_api_market_data.py::TestSymbolsEndpoint::test_get_symbols_success
+FAILED tests/test_api_market_data.py::TestSymbolsEndpoint::test_get_symbols_empty
+FAILED tests/test_api_market_data.py::TestSymbolsEndpoint::test_get_symbols_db_error
+FAILED tests/test_api_market_data.py::TestAuthEndpoints::test_register_invalid_email
+FAILED tests/test_api_market_data.py::TestAuthEndpoints::test_register_weak_password
+FAILED tests/test_api_market_data.py::TestAuthEndpoints::test_logout - assert...
+FAILED tests/test_api_market_data.py::TestIntegration::test_full_workflow - T...
+FAILED tests/test_config_loading.py::test_database_url_construction - Asserti...
+FAILED tests/test_config_loading.py::test_database_url_fallback_to_sqlite - A...
+FAILED tests/test_ema_crossover_strategy.py::test_strategy_initializes_defaults
+FAILED tests/test_ema_crossover_strategy.py::test_strategy_emits_buy_and_sell_on_crossovers
+FAILED tests/test_ema_crossover_strategy.py::test_strategy_returns_none_when_no_crossover
+FAILED tests/test_ema_crossover_strategy.py::test_ema_values_progress_over_time
+FAILED tests/test_ema_strategy.py::test_ema_crossover_emits_signals_on_cross
+FAILED tests/test_env_modes.py::test_finbot_mode_valid_values - ImportError: ...
+FAILED tests/test_env_modes.py::test_finbot_mode_invalid_value_raises_error
+FAILED tests/test_env_modes.py::test_live_mode_requires_confirmation - Assert...
+FAILED tests/test_env_modes.py::test_env_file_loading - AttributeError: <modu...
+FAILED tests/test_env_modes.py::test_safety_audit_script - AssertionError: as...
+FAILED tests/test_full_pipeline.py::test_full_pipeline_intraday_ema_with_mock_broker
+FAILED tests/test_health_endpoints.py::test_ready_endpoint_alias - assert 404...
+FAILED tests/test_health_endpoints.py::test_live_endpoint_alias - assert 429 ...
+FAILED tests/test_health_endpoints.py::test_api_health_endpoint - assert 429 ...
+FAILED tests/test_health_endpoints.py::test_health_endpoint_timestamp_format
+FAILED tests/test_health_endpoints.py::test_health_endpoint_cache_dependency_check
+FAILED tests/test_logging_and_metrics.py::test_metrics_endpoint_returns_valid_json
+FAILED tests/test_logging_and_metrics.py::test_metrics_endpoint_includes_uptime
+FAILED tests/test_logging_and_metrics.py::test_metrics_endpoint_includes_trade_stream_info
+FAILED tests/test_logging_and_metrics.py::test_metrics_endpoint_includes_dependencies_health
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_returns_structured_logs
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_filters_by_level
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_limits_results
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_pagination_with_since_until
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_masks_sensitive_data
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_handles_missing_log_file
+FAILED tests/test_logging_and_metrics.py::test_logs_endpoint_handles_corrupt_log_file
+FAILED tests/test_stock_scraper.py::test_detects_volume_spike_anomaly - Value...
+FAILED tests/trading_engine/test_backtest_runner.py::test_run_backtest_produces_result
+FAILED tests/unit/test_adapters.py::TestYFinanceAdapter::test_realtime_connect_not_implemented
+FAILED tests/unit/test_adapters.py::TestAlphaVantageAdapter::test_fetch_historical_data_daily
+FAILED tests/unit/test_adapters.py::TestAlphaVantageAdapter::test_fetch_historical_data_intraday
+FAILED tests/unit/test_adapters.py::TestAlphaVantageAdapter::test_realtime_connect_not_implemented
+FAILED tests/unit/test_adapters.py::TestAlphaVantageAdapter::test_context_manager
+FAILED tests/unit/test_ai_pipeline.py::test_pipeline_returns_grounded_answer
+FAILED tests/unit/test_cli.py::TestBackfillCommand::test_backfill_with_symbols
+FAILED tests/unit/test_cli.py::TestBackfillCommand::test_backfill_with_csv - ...
+FAILED tests/unit/test_cli.py::TestBackfillCommand::test_backfill_no_symbols
+FAILED tests/unit/test_cli.py::TestRealtimeCommand::test_realtime_with_mock_provider
+FAILED tests/unit/test_cli.py::TestMigrateCommand::test_migrate_success - Att...
+ERROR tests/e2e/test_paper_trading_e2e.py::test_paper_trading_buy_order_end_to_end
+ERROR tests/e2e/test_paper_trading_e2e.py::test_paper_trading_edge_cases_and_errors
+ERROR tests/e2e/test_paper_trading_e2e.py::test_paper_trading_limit_and_stop_orders
+ERROR tests/integration/test_adapters_integration.py::TestYFinanceAdapterIntegration::test_fetch_and_store_data
+ERROR tests/integration/test_adapters_integration.py::TestYFinanceAdapterIntegration::test_fetch_multiple_symbols
+ERROR tests/integration/test_backend_api_roles.py::test_metrics_requires_admin
+ERROR tests/integration/test_backend_api_roles.py::test_protected_get_routes_accept_user_token
+ERROR tests/integration/test_backend_api_roles.py::test_strategy_actions_accept_user_token
+ERROR tests/integration/test_backend_api_roles.py::test_malformed_and_expired_tokens_are_rejected
+ERROR tests/integration/test_backend_api_roles.py::test_logs_restricted_to_admin
+ERROR tests/integration/test_backend_api_roles.py::test_logs_returns_503_when_store_unavailable
+ERROR tests/performance/test_ingestion_performance.py::TestStoragePerformance::test_bulk_insert_performance
+ERROR tests/performance/test_ingestion_performance.py::TestStoragePerformance::test_fetch_performance
+ERROR tests/performance/test_ingestion_performance.py::TestEndToEndPerformance::test_full_pipeline_performance
+ERROR tests/performance/test_ingestion_performance.py::TestConcurrentOperations::test_concurrent_inserts
+ERROR tests/unit/test_adapters.py::TestKiteWebSocketAdapter::test_authenticate
+ERROR tests/unit/test_adapters.py::TestKiteWebSocketAdapter::test_subscribe
+ERROR tests/unit/test_adapters.py::TestKiteWebSocketAdapter::test_context_manager
+ERROR tests/unit/test_adapters.py::TestKiteWebSocketAdapter::test_process_message_tick
+ERROR tests/unit/test_storage.py::TestDataStorage::test_create_tables - pytes...
+ERROR tests/unit/test_storage.py::TestDataStorage::test_insert_candle - pytes...
+ERROR tests/unit/test_storage.py::TestDataStorage::test_insert_duplicate_candle
+ERROR tests/unit/test_storage.py::TestDataStorage::test_fetch_last_n_candles
+ERROR tests/unit/test_storage.py::TestDataStorage::test_fetch_last_n_candles_empty
+ERROR tests/unit/test_storage.py::TestDataStorage::test_fetch_last_n_candles_different_symbols
+ERROR tests/unit/test_storage.py::TestDataStorage::test_health_check_success

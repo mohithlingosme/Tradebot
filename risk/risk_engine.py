@@ -54,8 +54,11 @@ class RiskEngine:
             return False
 
         per_trade_risk = size * stop_distance
-        allowed_risk = self.capital * self.max_risk_per_trade
-        if per_trade_risk > allowed_risk:
+        max_lot_scale = max(1.0, float(self.max_lot_size))
+        size_fraction = min(size / max_lot_scale, 1.0)
+        # Distribute the total per-trade risk budget across the configured lot allowance
+        allowed_risk = (self.capital * self.max_risk_per_trade) * size_fraction
+        if per_trade_risk >= allowed_risk:
             return False
 
         if stop_loss is not None:

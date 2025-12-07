@@ -1,7 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
+from market_data_ingestion.src.api import app
+import json
+from unittest.mock import AsyncMock, patch, MagicMock
+import asyncio
 from fastapi import FastAPI
-from unittest.mock import AsyncMock, patch
 
 @pytest.fixture
 def test_app():

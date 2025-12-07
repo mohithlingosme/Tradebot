@@ -10,37 +10,56 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 
 def read_env(key: str, default: str | None = None) -> str | None:
     return os.getenv(key, default)
 
 
-def normalize_mode(value: str | None) -> str:
-    if not value:
-        return "UNKNOWN"
-    return value.strip().upper()
+def normalize_mode(
+    value: str | None,
+    *,
+    default: str = "dev",
+    allowed: Iterable[str] | None = ("dev", "paper", "live"),
+) -> str:
+    """Normalize textual mode strings with optional clamping to known values."""
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if allowed:
+        allowed_set = {item.lower() for item in allowed}
+        if normalized not in allowed_set:
+            return default
+    return normalized
 
 
 def check_trading_mode() -> Tuple[List[str], List[str]]:
     warnings: List[str] = []
     criticals: List[str] = []
 
-    trading_mode = normalize_mode(read_env("TRADING_MODE") or read_env("FINBOT_MODE"))
-    environment = normalize_mode(read_env("ENVIRONMENT") or read_env("APP_ENV"))
-    live_confirm = normalize_mode(read_env("FINBOT_LIVE_TRADING_CONFIRM")) in {"TRUE", "1", "YES"}
+    trading_mode = normalize_mode(
+        read_env("TRADING_MODE") or read_env("FINBOT_MODE"),
+        default="unknown",
+        allowed=("dev", "paper", "live"),
+    )
+    environment = normalize_mode(
+        read_env("ENVIRONMENT") or read_env("APP_ENV"),
+        default="unknown",
+        allowed=None,
+    )
+    live_confirm = (read_env("FINBOT_LIVE_TRADING_CONFIRM") or "").strip().lower() in {"true", "1", "yes"}
 
-    if trading_mode == "UNKNOWN":
+    if trading_mode == "unknown":
         warnings.append("TRADING_MODE not set; defaulting is risky. Set TRADING_MODE=DEV/PAPER/LIVE explicitly.")
-    elif trading_mode == "LIVE":
+    elif trading_mode == "live":
         criticals.append("⚠ LIVE TRADING MODE ENABLED. Confirm SEBI/compliance approvals and risk controls.")
         if not live_confirm:
             criticals.append("FINBOT_LIVE_TRADING_CONFIRM is not true while TRADING_MODE=LIVE.")
-    elif trading_mode in {"DEV", "PAPER", "DEMO"}:
-        warnings.append(f"TRADING_MODE={trading_mode}: good for non-production validation.")
+    elif trading_mode in {"dev", "paper"}:
+        warnings.append(f"TRADING_MODE={trading_mode.upper()}: good for non-production validation.")
 
-    if environment in {"PROD", "PRODUCTION"} and trading_mode != "LIVE":
+    if environment in {"prod", "production"} and trading_mode != "live":
         warnings.append("APP_ENV/ENVIRONMENT=PRODUCTION but TRADING_MODE is not LIVE; ensure this is intentional.")
 
     return warnings, criticals
@@ -64,9 +83,17 @@ def check_api_keys() -> Tuple[List[str], List[str]]:
         "KITE_API_SECRET",
     ]
 
-    trading_mode = normalize_mode(read_env("TRADING_MODE") or read_env("FINBOT_MODE"))
-    environment = normalize_mode(read_env("ENVIRONMENT") or read_env("APP_ENV"))
-    live_context = trading_mode == "LIVE" or environment in {"PROD", "PRODUCTION"}
+    trading_mode = normalize_mode(
+        read_env("TRADING_MODE") or read_env("FINBOT_MODE"),
+        default="unknown",
+        allowed=("dev", "paper", "live"),
+    )
+    environment = normalize_mode(
+        read_env("ENVIRONMENT") or read_env("APP_ENV"),
+        default="unknown",
+        allowed=None,
+    )
+    live_context = trading_mode == "live" or environment in {"prod", "production"}
 
     for key in key_names:
         value = read_env(key)
@@ -86,20 +113,28 @@ def check_use_case() -> Tuple[List[str], List[str]]:
     warnings: List[str] = []
     criticals: List[str] = []
 
-    use_case = normalize_mode(read_env("APP_USE_CASE") or "PERSONAL_EXPERIMENTAL")
-    trading_mode = normalize_mode(read_env("TRADING_MODE") or read_env("FINBOT_MODE"))
+    use_case = normalize_mode(
+        read_env("APP_USE_CASE") or "PERSONAL_EXPERIMENTAL",
+        default="personal_experimental",
+        allowed=None,
+    )
+    trading_mode = normalize_mode(
+        read_env("TRADING_MODE") or read_env("FINBOT_MODE"),
+        default="unknown",
+        allowed=("dev", "paper", "live"),
+    )
 
-    if use_case not in {"PERSONAL_EXPERIMENTAL", "INTERNAL_ONLY", "PUBLIC_DISTRIBUTION"}:
-        warnings.append(f"APP_USE_CASE={use_case} is unknown; default is PERSONAL_EXPERIMENTAL.")
+    if use_case not in {"personal_experimental", "internal_only", "public_distribution"}:
+        warnings.append(f"APP_USE_CASE={use_case.upper()} is unknown; default is PERSONAL_EXPERIMENTAL.")
 
-    if use_case == "PUBLIC_DISTRIBUTION":
+    if use_case == "public_distribution":
         criticals.append(
             "APP_USE_CASE=PUBLIC_DISTRIBUTION set. Legal/regulatory review required before any client-facing use."
         )
 
-    if trading_mode == "LIVE" and use_case != "PERSONAL_EXPERIMENTAL":
+    if trading_mode == "live" and use_case != "personal_experimental":
         criticals.append(
-            f"TRADING_MODE=LIVE with APP_USE_CASE={use_case}. Confirm SEBI/compliance approvals before proceeding."
+            f"TRADING_MODE=LIVE with APP_USE_CASE={use_case.upper()}. Confirm SEBI/compliance approvals before proceeding."
         )
 
     return warnings, criticals

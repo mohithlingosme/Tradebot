@@ -32,8 +32,7 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if self.ws:
-            await self.ws.close()
+        await self.close()
 
     def set_tick_handler(self, handler: Callable[[NormalizedTick], Awaitable[None]]):
         """Register a coroutine that will receive each normalized tick."""
@@ -48,6 +47,11 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
         logger.info(f"Subscribing to symbols: {symbols} (mock)")
         self.symbols = symbols
         await asyncio.sleep(1)  # Simulate subscription delay
+
+    async def close(self) -> None:
+        if self.ws:
+            await self.ws.close()
+        await self._mark_connected(False)
 
     async def _send_heartbeat(self):
         while True:
