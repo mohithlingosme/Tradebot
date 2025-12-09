@@ -93,6 +93,21 @@ class Settings(BaseSettings):
             value = getattr(self, field_name)
             object.__setattr__(self, field_name, expand_env_vars(value))
 
+    def __repr__(self) -> str:
+        """Return a string representation that masks sensitive fields."""
+        sensitive_fields = {
+            'jwt_secret_key', 'default_admin_password', 'default_user_password',
+            'database_url', 'redis_url', 'sentry_dsn'
+        }
+        attrs = {}
+        for field_name in getattr(self, "model_fields", {}):
+            value = getattr(self, field_name)
+            if field_name in sensitive_fields and value:
+                attrs[field_name] = "***MASKED***"
+            else:
+                attrs[field_name] = value
+        return f"{self.__class__.__name__}({attrs})"
+
 
 @lru_cache
 def get_settings() -> Settings:

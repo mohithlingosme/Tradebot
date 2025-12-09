@@ -1,72 +1,47 @@
-import { lazy, Suspense } from 'react'
-import type { ComponentType, LazyExoticComponent, ReactElement } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
-import ProtectedRoute from './components/ProtectedRoute'
+import { lazy } from 'react';
+import { RouteObject } from 'react-router-dom';
 
-const App = lazy(() => import('./App'))
-const Home = lazy(() => import('./pages/Home'))
-const Orders = lazy(() => import('./pages/Orders'))
-const Positions = lazy(() => import('./pages/Positions'))
-const Logs = lazy(() => import('./pages/Logs'))
-const Login = lazy(() => import('./pages/Login'))
-const Register = lazy(() => import('./pages/Register'))
-const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
-const Landing = lazy(() => import('./pages/Landing'))
+// Lazy load pages for better performance
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const MarketData = lazy(() => import('./pages/MarketData'));
+const Strategies = lazy(() => import('./pages/Strategies'));
+const RiskEngine = lazy(() => import('./pages/RiskEngine'));
+const Logs = lazy(() => import('./pages/Logs'));
+const Settings = lazy(() => import('./pages/Settings'));
 
-const LoadingFallback = () => (
-  <div className="route-loading">Loading…</div>
-)
-
-const lazyLoad = (Component: LazyExoticComponent<ComponentType<any>>): ReactElement => (
-  <Suspense fallback={<LoadingFallback />}>
-    <Component />
-  </Suspense>
-)
-
-const router = createBrowserRouter([
+export const routes: RouteObject[] = [
+  {
+    path: '/login',
+    element: <Login />,
+  },
+  {
+    path: '/register',
+    element: <Register />,
+  },
   {
     path: '/',
-    element: lazyLoad(App),
-    children: [
-      {
-        index: true,
-        element: (
-          <ProtectedRoute>
-            {lazyLoad(Home)}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'orders',
-        element: (
-          <ProtectedRoute>
-            {lazyLoad(Orders)}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'positions',
-        element: (
-          <ProtectedRoute>
-            {lazyLoad(Positions)}
-          </ProtectedRoute>
-        ),
-      },
-      {
-        path: 'logs',
-        element: (
-          <ProtectedRoute>
-            {lazyLoad(Logs)}
-          </ProtectedRoute>
-        ),
-      },
-      { path: 'landing', element: lazyLoad(Landing) },
-      { path: 'login', element: lazyLoad(Login) },
-      { path: 'register', element: lazyLoad(Register) },
-      { path: 'forgot-password', element: lazyLoad(ForgotPassword) },
-    ],
+    element: <Dashboard />,
   },
-  { path: '*', element: <Navigate to="/" replace /> },
-])
-
-export default router
+  {
+    path: '/market-data',
+    element: <MarketData />,
+  },
+  {
+    path: '/strategies',
+    element: <Strategies />,
+  },
+  {
+    path: '/risk-engine',
+    element: <RiskEngine />,
+  },
+  {
+    path: '/logs',
+    element: <Logs />,
+  },
+  {
+    path: '/settings',
+    element: <Settings />,
+  },
+];

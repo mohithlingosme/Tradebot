@@ -1,124 +1,106 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import './Auth.css'
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/use-toast';
 
-export default function Register() {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  })
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
-  const { register } = useAuth()
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    })
-  }
+const Register = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { register } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-
-    if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
-    if (formData.password.length < 8) {
-      setError('Password must be at least 8 characters long')
-      return
-    }
-
-    setLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
 
     try {
-      await register({
-        username: formData.username,
-        email: formData.email,
-        password: formData.password,
-      })
-      navigate('/', { replace: true })
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.detail || err?.message || 'Registration failed. Please try again.'
-      setError(message)
+      await register(email, password, name);
+      toast({
+        title: 'Success',
+        description: 'Account created successfully',
+      });
+      navigate('/');
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Registration failed. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
-      setLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h1>Finbot</h1>
-        <h2>Create Account</h2>
-        <form onSubmit={handleSubmit}>
-          {error && <div className="error-message">{error}</div>}
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              type="text"
-              id="username"
-              name="username"
-              value={formData.username}
-              onChange={handleChange}
-              required
-              autoComplete="username"
-            />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl text-center">Create Account</CardTitle>
+          <CardDescription className="text-center">
+            Enter your details to create your FINBOT account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="name" className="text-sm font-medium">
+                Full Name
+              </label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Enter your full name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Creating account...' : 'Create Account'}
+            </Button>
+          </form>
+          <div className="mt-4 text-center text-sm">
+            Already have an account?{' '}
+            <Link to="/login" className="text-primary hover:underline">
+              Sign in
+            </Link>
           </div>
-          <div className="form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              autoComplete="email"
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              autoComplete="new-password"
-              minLength={8}
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="confirmPassword">Confirm Password</label>
-            <input
-              type="password"
-              id="confirmPassword"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              required
-              autoComplete="new-password"
-            />
-          </div>
-          <button type="submit" disabled={loading} className="auth-button">
-            {loading ? 'Creating account...' : 'Sign Up'}
-          </button>
-        </form>
-        <div className="auth-links">
-          <Link to="/login">Already have an account? Sign in</Link>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  )
-}
+  );
+};
 
+export default Register;

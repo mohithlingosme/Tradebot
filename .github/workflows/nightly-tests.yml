@@ -1,60 +1,55 @@
-# FILE: .github/workflows/nightly-tests.yml
-name: Nightly Tests
+name: Nightly Full Test Suite
 
-# Fire nightly plus ad-hoc manual runs
 on:
   schedule:
+    # Run daily at 2 AM UTC
     - cron: '0 2 * * *'
-  workflow_dispatch:
-
-# Tests only read from the repository
-permissions:
-  contents: read
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
-  nightly:
-    name: Full regression suite
+  full-test-suite:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      PYTHONWARNINGS: default
+    strategy:
+      matrix:
+        python-version: ["3.11.9"]
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v3
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
 
-      # Keep dependency installation snappy even for long running suites
-      - name: Cache pip downloads
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: nightly-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt') }}
-          restore-keys: |
-            nightly-${{ runner.os }}-
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          if [ -f requirements-dev.txt ]; then
-            python -m pip install -r requirements-dev.txt
-          fi
-          python -m pip install pytest pytest-cov
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-dev.txt
+        pip install -e finbot-backend/
 
-      # Execute the most thorough suite (with coverage + durations)
-      - name: Run full pytest suite
-        run: |
-          mkdir -p reports
-          pytest --maxfail=1 --durations=25 --junitxml=reports/nightly.xml --cov=src --cov-report=xml:reports/nightly-coverage.xml
+    - name: Run full test suite
+      run: |
+        python -m pytest tests/ -v --cov=finbot --cov-report=xml --cov-report=html
 
-      - name: Upload nightly artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-pytests
-          path: reports/
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: nightly-coverage-report
+        path: htmlcov/
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: nightly-test-results
+        path: pytest_output.txt

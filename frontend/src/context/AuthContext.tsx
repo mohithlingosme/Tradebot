@@ -1,80 +1,123 @@
-import { createContext, useContext, useMemo, useState } from 'react'
-import { loginRequest, registerRequest } from '../services/auth'
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-interface AuthContextValue {
-  token: string | null
-  username: string | null
-  isAuthenticated: boolean
-  login: (payload: { username: string; password: string }) => Promise<void>
-  register: (payload: { username: string; email: string; password: string }) => Promise<void>
-  logout: () => void
+interface User {
+  id: string;
+  email: string;
+  name: string;
 }
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+interface AuthContextType {
+  user: User | null;
+  token: string | null;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
+  logout: () => void;
+}
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('access_token'))
-  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('username'))
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-  const persistSession = (sessionToken: string, userName?: string) => {
-    setToken(sessionToken)
-    setUsername(userName ?? null)
-    localStorage.setItem('access_token', sessionToken)
-    if (userName) {
-      localStorage.setItem('username', userName)
-    }
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
   }
+  return context;
+};
 
-  const login = async ({ username: user, password }: { username: string; password: string }) => {
-    const data = await loginRequest({ username: user, password })
-    if (!data?.access_token) {
-      throw new Error('Invalid response from server.')
-    }
-    persistSession(data.access_token, data.user?.username ?? user)
-  }
+interface AuthProviderProps {
+  children: ReactNode;
+}
 
-  const register = async ({
-    username: user,
-    email,
-    password,
-  }: {
-    username: string
-    email: string
-    password: string
-  }) => {
-    const data = await registerRequest({ username: user, email, password })
-    if (!data?.access_token) {
-      throw new Error('Invalid response from server.')
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    const storedUser = localStorage.getItem('user');
+
+    if (storedToken && storedUser) {
+      setToken(storedToken);
+      setUser(JSON.parse(storedUser));
     }
-    persistSession(data.access_token, data.user?.username ?? user)
-  }
+    setIsLoading(false);
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      const { token: newToken, user: userData } = data;
+
+      setToken(newToken);
+      setUser(userData);
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const register = async (email: string, password: string, name: string) => {
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Registration failed');
+      }
+
+      const data = await response.json();
+      const { token: newToken, user: userData } = data;
+
+      setToken(newToken);
+      setUser(userData);
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('user', JSON.stringify(userData));
+    } catch (error) {
+      throw error;
+    }
+  };
 
   const logout = () => {
-    setToken(null)
-    setUsername(null)
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('username')
-  }
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+  };
 
-  const value = useMemo(
-    () => ({
-      token,
-      username,
-      isAuthenticated: Boolean(token),
-      login,
-      register,
-      logout,
-    }),
-    [token, username]
-  )
+  const value: AuthContextType = {
+    user,
+    token,
+    isLoading,
+    login,
+    register,
+    logout,
+  };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
 
-export function useAuth() {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
-  return context
-}
+export { AuthContext };

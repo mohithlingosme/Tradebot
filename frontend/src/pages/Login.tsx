@@ -1,74 +1,92 @@
-import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import './Auth.css'
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/use-toast';
 
-export default function Login() {
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { login } = useAuth()
-  const locationState = (location.state as { from?: { pathname?: string } }) ?? {}
-  const fromPath = locationState.from?.pathname
-  const redirectTo = fromPath && fromPath !== '/login' ? fromPath : '/'
+const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
+    e.preventDefault();
+    setIsLoading(true);
 
     try {
-      await login({ username, password })
-      navigate(redirectTo, { replace: true })
-    } catch (err: any) {
-      const message = err?.response?.data?.detail || err?.message || 'Login failed. Please try again.'
-      setError(message)
+      await login(email, password);
+      toast({
+        title: 'Success',
+        description: 'Logged in successfully',
+      });
+      navigate('/');
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Login failed. Please check your credentials.',
+        variant: 'destructive',
+      });
     } finally {
-      setLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h1>Finbot</h1>
-        <h2>Sign In</h2>
-        <form onSubmit={handleSubmit}>
-          {error && <div className="error-message">{error}</div>}
-          <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              type="text"
-              id="username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-              autoComplete="username"
-            />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl text-center">Welcome to FINBOT</CardTitle>
+          <CardDescription className="text-center">
+            Enter your credentials to access your trading dashboard
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
+          <div className="mt-4 text-center text-sm">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-primary hover:underline">
+              Sign up
+            </Link>
           </div>
-          <div className="form-group">
-            <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-          </div>
-          <button type="submit" disabled={loading} className="auth-button">
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-        <div className="auth-links">
-          <Link to="/register">Don't have an account? Sign up</Link>
-          <Link to="/forgot-password">Forgot password?</Link>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
-  )
-}
+  );
+};
+
+export default Login;

@@ -50,6 +50,8 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 ## Getting Started (Local)
 > Prereqs: Python **3.11.9**, Node.js **18.x** (npm **9.x** bundled), Git, and Docker (for optional TA-Lib/compose workflows).
 
+> **Note**: The local setup runs in no-auth mode by default, so no authentication is required to access the API endpoints or frontend dashboard.
+
 ```bash
 git clone <repo-url>
 cd blackboxai-finbot
@@ -70,8 +72,13 @@ uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 # 4. Run market-data ingestion API
 python -m market_data_ingestion.src.api
 
-# 5. Start frontend (React/Tauri)
-cd frontend && npm install && npm run dev
+# 5. Set up frontend environment
+cd frontend
+echo "VITE_API_BASE_URL=http://localhost:8000" > .env
+echo "VITE_API_PREFIX=/api" >> .env
+
+# 6. Start frontend (React/Tauri)
+npm install && npm run dev
 
 # 6. Run the full Python test suite any time with a single command
 cd .. && pytest

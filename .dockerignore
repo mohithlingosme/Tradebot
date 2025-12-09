@@ -1,0 +1,77 @@
+# Version control
+.git
+.github
+
+# Dependencies
+node_modules
+.ven
+.venv
+.pytest_cache
+
+# IDE
+.vscode
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+
+# OS
+.DS_Store
+
+# Logs
+logs
+*.log
+market_data_ingestion.log
+test.log
+pytest_output.txt
+
+# Databases
+*.db
+test.db
+finbot_db.db
+market_data.db
+finbot_db_news.db
+
+# Environment files
+.env
+.env.demo
+.env.dev
+.env.live
+.env.paper
+
+# Documentation and misc
+*.md
+*.pdf
+*.json
+postman_collection.json
+package.json
+package-lock.json
+pyproject.toml
+pytest.ini
+push_all_branches.sh
+create_user.py
+
+# Directories not needed in image
+scripts
+docs
+examples
+notes
+marketing
+design
+infrastructure
+backend
+backtester
+common
+data_collector
+database
+execution
+finbot-frontend
+frontend
+risk
+strategies
+tests
+trading_engine
+ai
+ai_models
+ingestion

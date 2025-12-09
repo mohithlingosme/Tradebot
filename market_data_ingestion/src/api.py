@@ -137,92 +137,93 @@ async def get_available_symbols():
         logger.error(f"Error fetching symbols: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-# Auth router
-if AUTH_AVAILABLE:
-    auth_router = APIRouter()
-
-    class RegisterRequest(BaseModel):
-        """User registration request model."""
-        username: str
-        email: str
-        password: str
-
-    @auth_router.post("/register", response_model=TokenResponse)
-    async def api_register(request: RegisterRequest):
-        """
-        Register a new user.
-
-        Args:
-            request: Registration details
-
-        Returns:
-            JWT access token
-        """
-        from backend.api.auth import USER_DATABASE, pwd_context
-
-        # Check if user already exists
-        if request.username in USER_DATABASE:
-            raise HTTPException(status_code=400, detail="Username already exists")
-
-        # Validate email format
-        import re
-        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-        if not re.match(email_pattern, request.email):
-            raise HTTPException(status_code=400, detail="Invalid email format")
-
-        # Validate password strength
-        if len(request.password) < 8:
-            raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
-
-        # Create new user
-        hashed_password = pwd_context.hash(request.password)
-        USER_DATABASE[request.username] = {
-            "username": request.username,
-            "email": request.email,
-            "hashed_password": hashed_password,
-            "role": "user",
-        }
-
-        # Create token
-        access_token = create_access_token(data={"sub": request.username, "role": "user"})
-        logger.info(f"New user registered: {request.username}")
-
-        return TokenResponse(access_token=access_token, expires_in=1800)
-
-    @auth_router.post("/login", response_model=TokenResponse)
-    async def api_login(credentials: UserCredentials):
-        """
-        Authenticate user and return JWT token.
-
-        Args:
-            credentials: User login credentials
-
-        Returns:
-            JWT access token
-        """
-        user = authenticate_user(credentials.username, credentials.password)
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-
-        access_token = create_access_token(data={"sub": user.username, "role": getattr(user, "role", "user")})
-        return TokenResponse(access_token=access_token, expires_in=1800)
-
-    @auth_router.post("/logout")
-    async def api_logout(current_user = Depends(get_current_active_user)):
-        """
-        Logout user (invalidate token on client side).
-
-        Returns:
-            Logout confirmation
-        """
-        # In a stateless JWT system, logout is handled client-side by discarding the token
-        # For server-side token invalidation, implement token blacklisting
-        return {"message": "Logged out successfully"}
-
-    # Include auth router with prefix
-    app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-else:
-    logger.warning("Auth router not included - auth module not available")
+# Auth router - commented out for local no-auth setup
+# if AUTH_AVAILABLE:
+#     auth_router = APIRouter()
+#
+#     class RegisterRequest(BaseModel):
+#         """User registration request model."""
+#         username: str
+#         email: str
+#         password: str
+#
+#     @auth_router.post("/register", response_model=TokenResponse)
+#     async def api_register(request: RegisterRequest):
+#         """
+#         Register a new user.
+#
+#         Args:
+#             request: Registration details
+#
+#         Returns:
+#             JWT access token
+#         """
+#         from backend.api.auth import USER_DATABASE, pwd_context
+#
+#         # Check if user already exists
+#         if request.username in USER_DATABASE:
+#             raise HTTPException(status_code=400, detail="Username already exists")
+#
+#         # Validate email format
+#         import re
+#         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+#         if not re.match(email_pattern, request.email):
+#         if not re.match(email_pattern, request.email):
+#             raise HTTPException(status_code=400, detail="Invalid email format")
+#
+#         # Validate password strength
+#         if len(request.password) < 8:
+#             raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+#
+#         # Create new user
+#         hashed_password = pwd_context.hash(request.password)
+#         USER_DATABASE[request.username] = {
+#             "username": request.username,
+#             "email": request.email,
+#             "hashed_password": hashed_password,
+#             "role": "user",
+#         }
+#
+#         # Create token
+#         access_token = create_access_token(data={"sub": request.username, "role": "user"})
+#         logger.info(f"New user registered: {request.username}")
+#
+#         return TokenResponse(access_token=access_token, expires_in=1800)
+#
+#     @auth_router.post("/login", response_model=TokenResponse)
+#     async def api_login(credentials: UserCredentials):
+#         """
+#         Authenticate user and return JWT token.
+#
+#         Args:
+#             credentials: User login credentials
+#
+#         Returns:
+#             JWT access token
+#         """
+#         user = authenticate_user(credentials.username, credentials.password)
+#         if not user:
+#             raise HTTPException(status_code=401, detail="Invalid credentials")
+#
+#         access_token = create_access_token(data={"sub": user.username, "role": getattr(user, "role", "user")})
+#         return TokenResponse(access_token=access_token, expires_in=1800)
+#
+#     @auth_router.post("/logout")
+#     async def api_logout(current_user = Depends(get_current_active_user)):
+#         """
+#         Logout user (invalidate token on client side).
+#
+#         Returns:
+#             Logout confirmation
+#         """
+#         # In a stateless JWT system, logout is handled client-side by discarding the token
+#         # For server-side token invalidation, implement token blacklisting
+#         return {"message": "Logged out successfully"}
+#
+#     # Include auth router with prefix
+#     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+# else:
+#     logger.warning("Auth router not included - auth module not available")
 
 if __name__ == "__main__":
     import argparse
