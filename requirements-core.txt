@@ -35,6 +35,6 @@ prometheus-client~=0.19
 sentry-sdk~=1.39
 
 # Security & auth
-cryptography~=41.0
+cryptography~=46.0
 passlib[bcrypt]~=1.7
 python-jose[cryptography]~=3.3
