@@ -111,7 +111,7 @@ jobs:
           if [ -z "${{ secrets.PRIVATE_KEY }}" ]; then echo "PRIVATE_KEY secret is missing"; exit 1; fi
 
       - name: Deploy to staging
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
@@ -138,7 +138,7 @@ jobs:
           if [ -z "${{ secrets.PRIVATE_KEY }}" ]; then echo "PRIVATE_KEY secret is missing"; exit 1; fi
 
       - name: Deploy to production
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.4
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
