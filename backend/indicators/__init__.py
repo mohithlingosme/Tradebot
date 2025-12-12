@@ -23,6 +23,16 @@ from .aroon import Aroon
 from .auto_fib_extension import AutoFibExtension
 from .auto_fib_retracement import AutoFibRetracement
 from .auto_trendlines import AutoTrendlines
+from .volume_indicators import VolumeIndicators
+from .indicator_catalog import (
+    IndicatorDefinition,
+    INDICATORS,
+    INDICATOR_LOOKUP,
+    get_indicator,
+    indicators_by_category,
+    top_indicators,
+    search_indicators,
+)
 
 __all__ = [
     'RSI',
@@ -43,5 +53,13 @@ __all__ = [
     'Aroon',
     'AutoFibExtension',
     'AutoFibRetracement',
-    'AutoTrendlines'
+    'AutoTrendlines',
+    'VolumeIndicators',
+    'IndicatorDefinition',
+    'INDICATORS',
+    'INDICATOR_LOOKUP',
+    'get_indicator',
+    'indicators_by_category',
+    'top_indicators',
+    'search_indicators',
 ]

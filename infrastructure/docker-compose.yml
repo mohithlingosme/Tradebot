@@ -1,25 +1,12 @@
 version: "3.8"
 
 services:
-  backend_api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - ./backend:/app
-    environment:
-      - DATABASE_URL=${DATABASE_URL:-sqlite:///./market_data.db}
-    ports:
-      - "8000:8000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
+  # ----------------------------------------
+  # Postgres Database
+  # ----------------------------------------
   db:
     image: postgres:13
+    container_name: finbot_postgres
     environment:
       POSTGRES_DB: market_data
       POSTGRES_USER: finbot
@@ -31,10 +18,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 2G
         reservations:
-          cpus: '0.5'
+          cpus: "0.5"
           memory: 1G
     restart: unless-stopped
     healthcheck:
@@ -43,35 +30,63 @@ services:
       timeout: 10s
       retries: 3
 
+  # ----------------------------------------
+  # Redis Cache
+  # ----------------------------------------
+  redis:
+    image: redis:7
+    container_name: finbot_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # ----------------------------------------
+  # Backend API (FastAPI)
+  # ----------------------------------------
+  backend_api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: finbot_backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./market_data.db}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ----------------------------------------
+  # Market Data Ingestion (Development)
+  # ----------------------------------------
   market_data_ingestion:
     build:
       context: .
       dockerfile: infrastructure/Dockerfile
+    container_name: finbot_market_data_dev
     volumes:
       - .:/app
     ports:
-      - "8001:8001"  # API port (changed from 8000 to avoid conflict)
-      - "8080:8080"  # Health check port
-      - "9090:9090"  # Metrics port
+      - "8001:8001"
+      - "8080:8080"
+      - "9090:9090"
     environment:
-      - DATABASE_URL=postgresql://finbot:finbot123@db:5432/market_data
-      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
-      - KITE_API_KEY=${KITE_API_KEY}
-      - KITE_API_SECRET=${KITE_API_SECRET}
-      - LOG_LEVEL=INFO
-      - APP_ENV=development
-      - APP_PORT=8001
+      DATABASE_URL: postgresql://finbot:finbot123@db:5432/market_data
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY}
+      KITE_API_KEY: ${KITE_API_KEY}
+      KITE_API_SECRET: ${KITE_API_SECRET}
+      LOG_LEVEL: INFO
+      APP_ENV: development
+      APP_PORT: 8001
     depends_on:
       db:
         condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -79,7 +94,9 @@ services:
       timeout: 10s
       retries: 3
 
-  # Staging environment
+  # ----------------------------------------
+  # Market Data Ingestion (Staging)
+  # ----------------------------------------
   market_data_ingestion_staging:
     build:
       context: .
@@ -87,32 +104,34 @@ services:
     volumes:
       - .:/app
     ports:
-      - "8002:8002"  # Staging API port
-      - "8081:8081"  # Staging health check port
-      - "9091:9091"  # Staging metrics port
+      - "8002:8002"
+      - "8081:8081"
+      - "9091:9091"
     environment:
-      - DATABASE_URL=postgresql://finbot:finbot123@db:5432/market_data_staging
-      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
-      - KITE_API_KEY=${KITE_API_KEY}
-      - KITE_API_SECRET=${KITE_API_SECRET}
-      - LOG_LEVEL=INFO
-      - APP_ENV=staging
-      - APP_PORT=8002
-      - HEALTH_CHECK_PORT=8081
-      - METRICS_PORT=9091
+      DATABASE_URL: postgresql://finbot:finbot123@db:5432/market_data_staging
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY}
+      KITE_API_KEY: ${KITE_API_KEY}
+      KITE_API_SECRET: ${KITE_API_SECRET}
+      LOG_LEVEL: INFO
+      APP_ENV: staging
+      APP_PORT: 8002
+      HEALTH_CHECK_PORT: 8081
+      METRICS_PORT: 9091
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - staging
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    restart: unless-stopped
-    profiles:
-      - staging
 
-  # Sandbox environment for MVP
+  # ----------------------------------------
+  # Market Data Ingestion (Sandbox)
+  # ----------------------------------------
   market_data_ingestion_sandbox:
     build:
       context: .
@@ -120,27 +139,34 @@ services:
     volumes:
       - .:/app
     ports:
-      - "8003:8003"  # Sandbox API port
-      - "8082:8082"  # Sandbox health check port
-      - "9092:9092"  # Sandbox metrics port
+      - "8003:8003"
+      - "8082:8082"
+      - "9092:9092"
     environment:
-      - DATABASE_URL=sqlite:///app/market_data_sandbox.db
-      - ALPHAVANTAGE_API_KEY=${ALPHAVANTAGE_API_KEY}
-      - KITE_API_KEY=${KITE_API_KEY}
-      - KITE_API_SECRET=${KITE_API_SECRET}
-      - LOG_LEVEL=INFO
-      - APP_ENV=sandbox
-      - APP_PORT=8003
-      - HEALTH_CHECK_PORT=8082
-      - METRICS_PORT=9092
+      DATABASE_URL: sqlite:///app/market_data_sandbox.db
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY}
+      KITE_API_KEY: ${KITE_API_KEY}
+      KITE_API_SECRET: ${KITE_API_SECRET}
+      LOG_LEVEL: INFO
+      APP_ENV: sandbox
+      APP_PORT: 8003
+      HEALTH_CHECK_PORT: 8082
+      METRICS_PORT: 9092
+    restart: unless-stopped
+    profiles:
+      - sandbox
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-    restart: unless-stopped
-    profiles:
-      - sandbox
 
+# ----------------------------------------
+# Volumes
+# ----------------------------------------
 volumes:
   postgres_data:
+    driver: local
+  redis_data:
+    driver: local 
+      

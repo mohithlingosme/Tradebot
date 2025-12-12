@@ -1,0 +1,12 @@
+{
+    "start_date": "2023-01-03",
+    "end_date": "2023-01-03",
+    "symbols": ["AAPL"],
+    "strategy": "ema_crossover",
+    "short_window": 50,
+    "long_window": 200,
+    "initial_capital": 100000,
+    "risk_free_rate": 0.02,
+    "slippage_bps": 1.5,
+    "commission_rate": 0.001
+}

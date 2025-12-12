@@ -1,57 +1,32 @@
 """
-Advance Decline Line (ADL) Indicator
+Advance Decline Line Indicator
 
-The Advance Decline Line is a breadth indicator that plots the difference between advancing and declining stocks.
+Calculates the cumulative difference between advancing and declining stocks.
 """
 
-import numpy as np
-from typing import List, Optional
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import List, Optional, Sequence
 
 
+@dataclass
 class AdvanceDeclineLine:
-    """
-    Advance Decline Line (ADL) indicator.
+    """Advance Decline Line indicator."""
 
-    Formula:
-    ADL = Previous ADL + (Advancing Issues - Declining Issues)
-    """
+    def calculate(self, advancing: Sequence[float], declining: Sequence[float]) -> Optional[float]:
+        """Return the ADL value for the latest period."""
+        if len(advancing) != len(declining) or len(advancing) == 0:
+            return None
+        return float(advancing[-1] - declining[-1])
 
-    def __init__(self):
-        """
-        Initialize ADL indicator.
-        """
-        pass
-
-    def calculate(self, advancing: int, declining: int, prev_adl: float) -> float:
-        """
-        Calculate ADL for a single period.
-
-        Args:
-            advancing: Number of advancing issues
-            declining: Number of declining issues
-            prev_adl: Previous ADL value
-
-        Returns:
-            Current ADL value
-        """
-        adl = prev_adl + (advancing - declining)
+    def calculate_series(self, advancing: Sequence[float], declining: Sequence[float]) -> List[Optional[float]]:
+        """Return cumulative ADL series."""
+        if len(advancing) != len(declining):
+            return []
+        adl = []
+        cumulative = 0.0
+        for i in range(len(advancing)):
+            cumulative += advancing[i] - declining[i]
+            adl.append(float(cumulative))
         return adl
-
-    def calculate_series(self, advancing_list: List[int], declining_list: List[int]) -> List[float]:
-        """
-        Calculate ADL for each point in the series.
-
-        Args:
-            advancing_list: List of advancing issues
-            declining_list: List of declining issues
-
-        Returns:
-            List of ADL values
-        """
-        adl_values = []
-        prev_adl = 0.0
-        for adv, dec in zip(advancing_list, declining_list):
-            adl = self.calculate(adv, dec, prev_adl)
-            adl_values.append(adl)
-            prev_adl = adl
-        return adl_values

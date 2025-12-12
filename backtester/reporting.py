@@ -6,6 +6,7 @@ from math import sqrt
 from statistics import mean, pstdev
 from typing import Dict, List, Tuple
 
+import matplotlib.pyplot as plt
 from trading_engine.phase4.models import OrderFill
 
 
@@ -15,6 +16,7 @@ class PerformanceReport:
     annualized_return: float = 0.0
     volatility: float = 0.0
     sharpe_ratio: float = 0.0
+    sortino_ratio: float = 0.0
     max_drawdown: float = 0.0
     win_rate: float = 0.0
     profit_factor: float = 0.0
@@ -29,6 +31,7 @@ class PerformanceReport:
             "annualized_return": self.annualized_return,
             "volatility": self.volatility,
             "sharpe_ratio": self.sharpe_ratio,
+            "sortino_ratio": self.sortino_ratio,
             "max_drawdown": self.max_drawdown,
             "win_rate": self.win_rate,
             "profit_factor": self.profit_factor,
@@ -44,6 +47,7 @@ class BacktestReport:
     performance: PerformanceReport
     trades: List[OrderFill]
     equity_curve: List[Tuple[datetime, float]]
+    plot_path: Optional[str] = None
 
     def to_dict(self) -> Dict:
         return {
@@ -62,7 +66,50 @@ class BacktestReport:
                 for t in self.trades
             ],
             "equity_curve": [{"timestamp": ts.isoformat(), "equity": eq} for ts, eq in self.equity_curve],
+            "plot_path": self.plot_path,
         }
+
+
+def plot_equity_curve(equity_curve: List[Tuple[datetime, float]], out_path: Optional[str] = None) -> None:
+    if not equity_curve:
+        return
+
+    timestamps, equities = zip(*equity_curve)
+    plt.figure(figsize=(10, 6))
+    plt.plot(timestamps, equities, label="Equity Curve", color="blue")
+    plt.title("Backtest Equity Curve")
+    plt.xlabel("Date")
+    plt.ylabel("Equity")
+    plt.grid(True)
+    plt.legend()
+
+    if out_path:
+        plt.savefig(out_path)
+    else:
+        plt.show()
+    plt.close()
+
+
+def _sortino_ratio(
+    returns: List[float], risk_free_rate: float, periods: int = 252
+) -> Optional[float]:
+    if not returns:
+        return None
+
+    target_return = risk_free_rate / periods
+    downside_returns = [r for r in returns if r < target_return]
+
+    if not downside_returns:
+        return float("inf")
+
+    expected_return = mean(returns)
+    downside_std_dev = pstdev(downside_returns)
+
+    if downside_std_dev == 0:
+        return float("inf")
+
+    sortino = (expected_return - target_return) / downside_std_dev * sqrt(periods)
+    return sortino
 
 
 def build_performance_report(
@@ -95,6 +142,9 @@ def build_performance_report(
         if std > 0:
             excess = mean(returns) - (risk_free_rate / 252)
             report.sharpe_ratio = (excess / std) * sqrt(252)
+        sortino = _sortino_ratio(returns, risk_free_rate)
+        if sortino is not None:
+            report.sortino_ratio = sortino
 
     report.max_drawdown = _max_drawdown(equity_curve)
 

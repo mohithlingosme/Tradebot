@@ -27,7 +27,7 @@ from trading_engine.phase4.strategy import Strategy
 from risk.risk_engine import RiskEngine
 from .config import BacktestConfig
 from .costs import CostModel
-from .reporting import BacktestReport, build_performance_report
+from .reporting import BacktestReport, build_performance_report, plot_equity_curve
 from .simulator import TradeSimulator
 
 MarketEvent = Union[Bar, Tick]
@@ -273,7 +273,11 @@ class EventBacktester:
         self.trades: List[OrderFill] = []
         self.equity_curve: List[tuple] = [(self.config.start, self.simulator.portfolio.equity)]
 
-    def run(self, events: Union[Dict[str, Sequence[MarketEvent]], Iterable[MarketEvent]]) -> BacktestReport:
+    def run(
+        self,
+        events: Union[Dict[str, Sequence[MarketEvent]], Iterable[MarketEvent]],
+        plot_path: str | None = None,
+    ) -> BacktestReport:
         normalized_events = self._normalize_events(events)
         for event in normalized_events:
             if event.timestamp < self.config.start or event.timestamp > self.config.end:
@@ -294,7 +298,16 @@ class EventBacktester:
             fees_paid=self.simulator.fees_paid,
             risk_free_rate=self.config.risk_free_rate,
         )
-        return BacktestReport(performance=performance, trades=self.trades, equity_curve=self.equity_curve)
+
+        if plot_path:
+            plot_equity_curve(self.equity_curve, plot_path)
+
+        return BacktestReport(
+            performance=performance,
+            trades=self.trades,
+            equity_curve=self.equity_curve,
+            plot_path=plot_path,
+        )
 
     def _on_bar(self, bar: Bar) -> List[OrderFill]:
         fills = self.simulator.mark_to_market(bar)

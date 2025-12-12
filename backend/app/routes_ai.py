@@ -3,6 +3,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ai.agents.narrative_ai import NarrativeAI
+from ai.agents.research_ai import ResearchAI
+from ai_models.llm import mock_llm_runner
 from ai_models.pipeline import AIResponse, FinbotAIPipeline
 from ai_models.safety import SafetyLayer
 
@@ -30,10 +33,40 @@ class QueryPayload(BaseModel):
     user_id: str | None = "anonymous"
 
 
-@router.post("/query", response_model=AIResponse)
-async def query_ai(payload: QueryPayload):
-    question = payload.question
-    user_id = payload.user_id or "anonymous"
-    if not question:
-        raise HTTPException(status_code=400, detail="Question is required.")
-    return await pipeline.answer(user_id=user_id, question=question)
+@router.get("/explain_trade/{trade_id}")
+async def explain_trade(trade_id: str):
+    """
+    Generates an explanation for a given trade.
+    """
+    # TODO: Fetch real trade details from the database using the trade_id
+    mock_trade_details = {
+        "symbol": "AAPL",
+        "entry_price": 150.0,
+        "exit_price": 155.0,
+        "pnl": 5.0,
+        "strategy": "ema_crossover",
+    }
+
+    research_ai = ResearchAI(llm_runner=mock_llm_runner)
+    narrative_ai = NarrativeAI(research_ai=research_ai, llm_runner=mock_llm_runner)
+
+    explanation = narrative_ai.symbol_narrative(
+        symbol=mock_trade_details["symbol"],
+        horizon="intraday",
+        market_data=mock_trade_details,
+    )
+    return {"trade_id": trade_id, "explanation": explanation}
+
+
+
+@router.get("/explain_strategy/{strategy_name}")
+async def explain_strategy(strategy_name: str):
+    """
+    Generates an explanation for a given strategy.
+    """
+    research_ai = ResearchAI(llm_runner=mock_llm_runner)
+    narrative_ai = NarrativeAI(research_ai=research_ai, llm_runner=mock_llm_runner)
+
+    explanation = narrative_ai.market_narrative(index=strategy_name, horizon="long-term")
+    return {"strategy": strategy_name, "explanation": explanation}
+

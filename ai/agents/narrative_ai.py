@@ -40,7 +40,9 @@ class NarrativeAI:
             max_tokens=220,
             temperature=0.4,
         )
-        return getattr(response, "response", "") or ""
+        narrative = getattr(response, "response", "") or ""
+        disclaimer = "\n\nDisclaimer: This is not investment advice. All financial decisions should be made with the help of a professional."
+        return narrative + disclaimer
 
     def symbol_narrative(
         self,
@@ -69,5 +71,7 @@ class NarrativeAI:
             max_tokens=240,
             temperature=0.4,
         )
-        return getattr(response, "response", "") or ""
+        narrative = getattr(response, "response", "") or ""
+        disclaimer = "\n\nDisclaimer: This is not investment advice. All financial decisions should be made with the help of a professional."
+        return narrative + disclaimer
 
