@@ -5,7 +5,7 @@ The Bull Bear Power indicator measures the strength of bulls versus bears.
 """
 
 import numpy as np
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 class BullBearPower:
