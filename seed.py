@@ -1,34 +1,38 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from models import Base, User
-from passlib.context import CryptContext
+#!/usr/bin/env python3
+"""Script to seed the database with initial data."""
 
-# 1. Connect to Database
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/finbot_db"
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
-db = SessionLocal()
+import sys
+import os
 
-# 2. Setup Password Security
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-hashed_pw = pwd_context.hash("admin123") # <--- THIS IS YOUR PASSWORD
+# Add the backend directory to the Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
 
-# 3. Create the User
-print("Checking for existing user...")
-existing_user = db.query(User).filter(User.email == "admin@finbot.com").first()
+from sqlmodel import Session
+from backend.app.database import engine
+from backend.app.services.user_service import user_service
 
-if not existing_user:
-    new_user = User(
-        email="admin@finbot.com",
-        hashed_password=hashed_pw,
-        is_active=True
-    )
-    db.add(new_user)
-    db.commit()
-    print("? SUCCESS: User created!")
-    print("   Email:    admin@finbot.com")
-    print("   Password: admin123")
-else:
-    print("??  User 'admin@finbot.com' already exists.")
+def seed_data():
+    """Seeds the database with default users."""
+    print("Seeding database...")
 
-db.close()
+    with Session(engine) as session:
+        # Create default admin and user
+        user_service.ensure_default_users(session)
+
+        # Create a specific user if it doesn't exist
+        username = "mohith"
+        email = "mohithlingosme0218@gmail.com"
+        password = "@Dcmk2664"
+
+        existing_user = user_service.get_user_by_username(session, username)
+        if not existing_user:
+            user = user_service.create_user(session, username, password, email=email)
+            session.commit()
+            print(f"Created user: {user.username} ({user.email})")
+        else:
+            print(f"User '{username}' already exists.")
+
+    print("Database seeding complete.")
+
+if __name__ == "__main__":
+    seed_data()

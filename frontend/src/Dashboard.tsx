@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, RefreshCcw, TrendingUp } from 'lucide-react'
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
-import { getPortfolio, getPrice, placeTrade } from './api'
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import type { IndicatorsResponse } from './api'
+import { getIndicators, getPortfolio, placeTrade } from './api'
 
 type Portfolio = {
   cash: number
@@ -10,101 +21,202 @@ type Portfolio = {
   buying_power: number
 }
 
-type PriceData = {
-  price: number
-  timestamp?: string
-  time?: string
+type ChartRow = Record<string, string | number | null>
+
+const PRICE_FALLBACK = '--'
+const COLOR_PALETTE = [
+  '#f87171',
+  '#34d399',
+  '#60a5fa',
+  '#facc15',
+  '#c084fc',
+  '#fb7185',
+  '#14b8a6',
+  '#a855f7',
+  '#f97316',
+  '#22d3ee',
+]
+
+const formatMetric = (value?: number | null, formatAsCurrency = false) => {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return PRICE_FALLBACK
+  }
+  return formatAsCurrency ? `$${value.toFixed(2)}` : value.toFixed(2)
 }
 
-type PriceHistoryPoint = {
-  label: string
-  price: number
+const formatIndicatorLabel = (key: string) =>
+  key
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+
+type TrendDirection = 'positive' | 'negative' | 'neutral'
+
+const computeDirection = (current?: number | null, previous?: number | null): TrendDirection => {
+  if (
+    current === undefined ||
+    current === null ||
+    Number.isNaN(current) ||
+    previous === undefined ||
+    previous === null ||
+    Number.isNaN(previous)
+  ) {
+    return 'neutral'
+  }
+  if (current > previous) return 'positive'
+  if (current < previous) return 'negative'
+  return 'neutral'
 }
 
-const PRICE_POLL_INTERVAL = 5000
-const MAX_HISTORY_POINTS = 30
+const DIRECTION_META: Record<TrendDirection, { label: string; className: string }> = {
+  positive: { label: 'Positive', className: 'text-green-400' },
+  negative: { label: 'Negative', className: 'text-red-400' },
+  neutral: { label: 'Neutral', className: 'text-slate-400' },
+}
+
+const extractTrend = (series: Array<number | null>): { value: number | null; direction: TrendDirection } => {
+  if (!series.length) {
+    return { value: null, direction: 'neutral' }
+  }
+  let current: number | null = null
+  let previous: number | null = null
+  for (let idx = series.length - 1; idx >= 0; idx -= 1) {
+    if (series[idx] !== null && series[idx] !== undefined) {
+      current = series[idx]
+      break
+    }
+  }
+  if (current !== null) {
+    for (let idx = series.length - 2; idx >= 0; idx -= 1) {
+      if (series[idx] !== null && series[idx] !== undefined) {
+        previous = series[idx]
+        break
+      }
+    }
+  }
+  return { value: current, direction: computeDirection(current, previous) }
+}
 
 export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
-  const [priceData, setPriceData] = useState<PriceData | null>(null)
-  const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([])
-  const [symbol, setSymbol] = useState('AAPL')
+  const [symbol, setSymbol] = useState('BTC/USD')
   const [qty, setQty] = useState(1)
+  const [indicatorData, setIndicatorData] = useState<IndicatorsResponse | null>(null)
+  const [availableIndicators, setAvailableIndicators] = useState<string[]>([])
+  const [selectedOverlays, setSelectedOverlays] = useState<string[]>([])
+  const [selectedOscillators, setSelectedOscillators] = useState<string[]>([])
+  const [priceSnapshot, setPriceSnapshot] = useState<{ price: number; time: string } | null>(null)
+  const [loadingIndicators, setLoadingIndicators] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
-    fetchPortfolio()
-  }, [])
-
-  useEffect(() => {
-    setPriceHistory([])
-  }, [symbol])
-
-  const fetchPortfolio = async () => {
-    try {
-      const data = await getPortfolio()
-      setPortfolio(data)
-    } catch (err) {
-      console.error(err)
-      navigate('/')
-    }
-  }
-
-  const fetchLivePrice = useCallback(async () => {
-    const data = await getPrice(symbol)
-    setPriceData(data)
-
-    const timestamp = data.time ?? data.timestamp ?? new Date().toISOString()
-    const formattedLabel = new Date(timestamp).toLocaleTimeString([], {
-      hour12: false,
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
-
-    setPriceHistory((prev) => {
-      const next = [...prev, { label: formattedLabel, price: Number(data.price) }]
-      if (next.length > MAX_HISTORY_POINTS) {
-        next.shift()
-      }
-      return next
-    })
-  }, [symbol])
-
-  useEffect(() => {
-    let isMounted = true
-
-    const tick = () => {
-      fetchLivePrice().catch((err) => {
-        if (isMounted) {
-          console.error(err)
-        }
+    getPortfolio()
+      .then(setPortfolio)
+      .catch((err) => {
+        console.error(err)
+        navigate('/')
       })
-    }
+  }, [navigate])
 
-    tick()
-    const interval = setInterval(tick, PRICE_POLL_INTERVAL)
-
-    return () => {
-      isMounted = false
-      clearInterval(interval)
-    }
-  }, [fetchLivePrice])
-
-  const handleGetPrice = async () => {
+  const fetchIndicators = useCallback(async () => {
+    setLoadingIndicators(true)
     try {
-      await fetchLivePrice()
+      const data = await getIndicators(symbol)
+      setIndicatorData(data)
+      const keys = Object.keys(data.indicators).sort()
+      setAvailableIndicators(keys)
+      setSelectedOverlays((prev) => prev.filter((key) => keys.includes(key)))
+      setSelectedOscillators((prev) => prev.filter((key) => keys.includes(key)))
+      if (!keys.length) {
+        setSelectedOverlays([])
+        setSelectedOscillators([])
+      }
+      if (data.timestamp.length && data.price.length) {
+        const lastIndex = data.timestamp.length - 1
+        setPriceSnapshot({
+          time: data.timestamp[lastIndex],
+          price: data.price[lastIndex],
+        })
+      } else {
+        setPriceSnapshot(null)
+      }
     } catch (err) {
       console.error(err)
-      alert('Symbol not found')
+      alert('Unable to fetch indicator data.')
+    } finally {
+      setLoadingIndicators(false)
     }
+  }, [symbol])
+
+  useEffect(() => {
+    fetchIndicators()
+  }, [fetchIndicators])
+
+  const chartRows: ChartRow[] = useMemo(() => {
+    if (!indicatorData) return []
+    const rows: ChartRow[] = indicatorData.timestamp.map((time, idx) => ({
+      time,
+      label: new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      price: indicatorData.price[idx] ?? null,
+    }))
+    Object.entries(indicatorData.indicators).forEach(([key, series]) => {
+      rows.forEach((row, idx) => {
+        row[key] = series[idx] ?? null
+      })
+    })
+    return rows
+  }, [indicatorData])
+
+  const indicatorColorMap = useMemo(() => {
+    const map = new Map<string, string>()
+    availableIndicators.forEach((key, idx) => {
+      map.set(key, COLOR_PALETTE[idx % COLOR_PALETTE.length])
+    })
+    return map
+  }, [availableIndicators])
+
+  const indicatorMetrics = useMemo(() => {
+  if (!indicatorData) {
+    const placeholder = [
+      {
+        label: 'Price',
+        value: null,
+        direction: 'neutral' as TrendDirection,
+        currency: true,
+      },
+    ]
+    const rest = availableIndicators.map((label) => ({
+      label: formatIndicatorLabel(label),
+      value: null,
+      direction: 'neutral' as TrendDirection,
+      currency: false,
+    }))
+    return [...placeholder, ...rest]
   }
+  const metrics = [
+    {
+      label: 'Price',
+      ...extractTrend(indicatorData.price.map((value) => value ?? null)),
+      currency: true,
+    },
+  ]
+  availableIndicators.forEach((key) => {
+    const series = indicatorData.indicators[key] ?? []
+    metrics.push({
+      label: formatIndicatorLabel(key),
+      ...extractTrend(series),
+      currency: false,
+    })
+  })
+  return metrics
+}, [indicatorData, availableIndicators])
 
   const handleTrade = async (side: 'buy' | 'sell') => {
     try {
       await placeTrade({ symbol, qty, side })
-      alert(`${side.toUpperCase()} Order Placed!`)
-      fetchPortfolio()
+      alert(`${side.toUpperCase()} order placed`)
+      const refreshed = await getPortfolio()
+      setPortfolio(refreshed)
     } catch (err) {
       console.error(err)
       alert('Trade Failed')
@@ -113,6 +225,14 @@ export default function Dashboard() {
 
   if (!portfolio) {
     return <div className="p-10 text-white">Loading Financial Data...</div>
+  }
+
+  const handleSelectChange = (
+    event: React.ChangeEvent<HTMLSelectElement>,
+    setter: (value: string[]) => void
+  ) => {
+    const options = Array.from(event.target.selectedOptions).map((opt) => opt.value)
+    setter(options)
   }
 
   return (
@@ -145,38 +265,77 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-          <h2 className="text-xl font-bold mb-4">📡 Live Market Data</h2>
-          <div className="flex gap-2 mb-4">
+      <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold mb-1">Indicator Selector</h2>
+            <p className="text-slate-400 text-sm">Choose overlays and oscillators to visualize.</p>
+          </div>
+          <div className="flex gap-2">
             <input
               value={symbol}
               onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-              className="bg-slate-700 p-2 rounded text-white w-full border border-slate-600"
+              className="bg-slate-700 p-2 rounded text-white border border-slate-600"
               placeholder="Symbol (e.g. BTC/USD)"
             />
-            <button onClick={handleGetPrice} className="bg-blue-600 px-4 rounded hover:bg-blue-500">
-              <RefreshCcw size={20} />
+            <button
+              onClick={fetchIndicators}
+              className="bg-blue-600 px-4 rounded hover:bg-blue-500 flex items-center gap-2 disabled:opacity-50"
+              disabled={loadingIndicators}
+            >
+              <RefreshCcw size={16} /> {loadingIndicators ? 'Loading...' : 'Fetch'}
             </button>
           </div>
-          {priceData && (
-            <div className="text-center p-4 bg-slate-700/50 rounded animate-pulse">
-              <div className="text-4xl font-bold">${priceData.price}</div>
-              <div className="text-sm text-slate-400 mt-1">
-                {priceData.timestamp ?? priceData.time}
-              </div>
-            </div>
-          )}
-          <div className="mt-6">
-            <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
-              <span>Live Price Trace</span>
-              <span>{symbol}</span>
-            </div>
-            <div className="h-64">
-              {priceHistory.length > 1 ? (
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Overlay Indicators</label>
+            <select
+              multiple
+              value={selectedOverlays}
+              onChange={(event) => handleSelectChange(event, setSelectedOverlays)}
+              className="w-full bg-slate-700 border border-slate-600 rounded p-2 h-32"
+            >
+              {availableIndicators.map((key) => (
+                <option key={key} value={key}>
+                  {formatIndicatorLabel(key)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Oscillator Indicators</label>
+            <select
+              multiple
+              value={selectedOscillators}
+              onChange={(event) => handleSelectChange(event, setSelectedOscillators)}
+              className="w-full bg-slate-700 border border-slate-600 rounded p-2 h-32"
+            >
+              {availableIndicators.map((key) => (
+                <option key={key} value={key}>
+                  {formatIndicatorLabel(key)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col xl:flex-row gap-8">
+        <div className="flex-1 space-y-8">
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 className="text-xl font-bold mb-4">📡 Market View</h2>
+            <div className="h-80">
+              {chartRows.length ? (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={priceHistory}>
-                    <CartesianGrid strokeDasharray="4 4" stroke="#334155" />
+                  <AreaChart data={chartRows}>
+                    <defs>
+                      <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.6} />
+                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.1} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
                     <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 12 }} />
                     <YAxis
                       tickFormatter={(value) => `$${Number(value).toFixed(2)}`}
@@ -186,53 +345,132 @@ export default function Dashboard() {
                     <Tooltip
                       contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
                       labelStyle={{ color: '#94a3b8' }}
-                      formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
+                      formatter={(value: number, name) => [`${value.toFixed(2)}`, formatIndicatorLabel(String(name))]}
                     />
-                    <Line
+                    <Area
                       type="monotone"
                       dataKey="price"
-                      stroke="#34d399"
+                      stroke="#38bdf8"
+                      fillOpacity={1}
+                      fill="url(#priceGradient)"
                       strokeWidth={2}
-                      dot={false}
-                      isAnimationActive={false}
                     />
-                  </LineChart>
+                    {selectedOverlays.map((key) => (
+                      <Line
+                        key={key}
+                        type="monotone"
+                        dataKey={key}
+                        stroke={indicatorColorMap.get(key) ?? '#facc15'}
+                        dot={false}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </AreaChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-full flex items-center justify-center text-slate-500 text-sm border border-dashed border-slate-700 rounded">
-                  Waiting for real-time ticks...
+                  {loadingIndicators ? 'Loading indicator data...' : 'No indicator data available.'}
                 </div>
               )}
             </div>
           </div>
+
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+            <h2 className="text-lg font-semibold mb-2">Oscillator Panels</h2>
+            {selectedOscillators.length ? (
+              selectedOscillators.map((key) => (
+                <div key={key} className="h-48 border border-slate-700 rounded-lg p-2">
+                  <p className="text-xs text-slate-400 mb-1">{formatIndicatorLabel(key)}</p>
+                  <ResponsiveContainer width="100%" height="90%">
+                    <LineChart data={chartRows}>
+                      <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
+                      <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={60} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
+                        labelStyle={{ color: '#94a3b8' }}
+                        formatter={(value: number) => [`${value.toFixed(2)}`, formatIndicatorLabel(key)]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey={key}
+                        stroke={indicatorColorMap.get(key) ?? '#f97316'}
+                        strokeWidth={2}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              ))
+            ) : (
+              <div className="h-24 flex items-center justify-center text-slate-500 text-sm border border-dashed border-slate-700 rounded">
+                Select oscillator indicators to visualize them here.
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
-          <h2 className="text-xl font-bold mb-4">⚡ Quick Execution</h2>
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1">
+        <div className="xl:w-80 space-y-6">
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 className="text-lg font-semibold mb-4">Control Panel</h2>
+            <div className="p-4 bg-slate-700/40 rounded mb-4">
+              <p className="text-xs text-slate-400 mb-1">Last Update</p>
+              <div className="text-2xl font-semibold">
+                {priceSnapshot ? `$${priceSnapshot.price.toFixed(2)}` : PRICE_FALLBACK}
+              </div>
+              <p className="text-xs text-slate-500">
+                {priceSnapshot ? new Date(priceSnapshot.time).toLocaleString() : 'Awaiting data'}
+              </p>
+            </div>
+            <div className="space-y-4 text-sm max-h-[420px] overflow-y-auto pr-2">
+              {indicatorMetrics.map((metric) => {
+                const meta = DIRECTION_META[metric.direction]
+                return (
+                  <div
+                    key={metric.label}
+                    className="flex items-center justify-between border-b border-slate-700 pb-2 last:border-b-0"
+                  >
+                    <div className="text-slate-300">{metric.label}</div>
+                    <div className="text-right">
+                      <div className="text-white font-semibold">
+                        {formatMetric(metric.value, metric.currency)}
+                      </div>
+                      <div className={`text-xs ${meta.className}`}>{meta.label}</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 className="text-xl font-bold mb-4">⚡ Quick Execution</h2>
+            <div className="mb-4">
               <label className="block text-xs text-slate-400 mb-1">Quantity</label>
               <input
                 type="number"
                 value={qty}
                 onChange={(e) => setQty(Number(e.target.value))}
                 className="w-full bg-slate-700 p-2 rounded text-white border border-slate-600"
+                min={0.01}
+                step={0.01}
               />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={() => handleTrade('buy')}
-              className="bg-green-600 py-3 rounded font-bold hover:bg-green-500 transition"
-            >
-              BUY {symbol}
-            </button>
-            <button
-              onClick={() => handleTrade('sell')}
-              className="bg-red-600 py-3 rounded font-bold hover:bg-red-500 transition"
-            >
-              SELL {symbol}
-            </button>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                onClick={() => handleTrade('buy')}
+                className="bg-green-600 py-3 rounded font-bold hover:bg-green-500 transition"
+              >
+                BUY {symbol}
+              </button>
+              <button
+                onClick={() => handleTrade('sell')}
+                className="bg-red-600 py-3 rounded font-bold hover:bg-red-500 transition"
+              >
+                SELL {symbol}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 # Finbot Monorepo
+
 Finbot is an AI-enabled trading research and execution platform that combines real-time APIs, ingestion pipelines, strategy engines, market data tooling, and observability into a single monorepo.
 
 ## Features at a Glance
@@ -9,32 +10,6 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 - **Data collector scripts**: Standalone helpers for backfills, migrations, and mock ingestion.
 - **Observability + docs**: Docker, compose profiles, Kubernetes helpers, and design docs.
 
-## Module Overview
-- `/backend`: FastAPI app, auth, telemetry, caching, and route handlers for Finbot services.
-- `/frontend`: Vite/Tauri dashboard code (React + Rust host) for trader UI.
-- `/market_data_ingestion`: Ingestion pipelines, adapters, CLI, metrics, and scheduler.
-- `/trading_engine`: Strategy manager, backtester, live trading orchestrator, and helpers.
-- `/ai_models`: Central AI pipeline, safety guard rails, and response models for assistants.
-- `/data_collector`: Reusable market data normalization + standalone CLI scripts for migrations, backfills, and realtime mocking.
-- `/infrastructure`: Dockerfiles, `docker-compose`, deploy scripts, and security tooling.
-- `/docs`: Vision, architecture, module guides, and TODO trackers.
-- `/tests`, `/database`, `/src`: Shared tests, SQL schema, and additional utility scripts.
-
-## Repository Layout
-```
-/backend
-/frontend
-/market_data_ingestion
-/trading_engine
-/ai_models
-/data_collector
-/infrastructure
-/docs
-/tests
-/database
-/src
-```
-
 ## Tech Stack
 - **Language**: Python 3.11.9 (CI verified), Pydantic 2, FastAPI, SQLModel, SQLAlchemy
 - **Data & ML**: pandas, numpy, scikit-learn, ta-lib, AlphalVantage, yfinance
@@ -42,97 +17,105 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 - **Dev tooling**: pytest, black, ruff, mypy, isort, pre-commit
 - **Frontend**: Vite/Tauri (React + Rust)
 
-### CI/Tooling Versions
-- CI runs on Python **3.11.9** with `pip check` and safety audit enabled.
-- Frontend CI pins Node.js **18.x** (npm **9.x**).
-- YAML linting (`yamllint`) runs on all workflow files and `docker-compose.yml` if present.
+## Getting Started
 
-## Getting Started (Local)
-> Prereqs: Python **3.11.9**, Node.js **18.x** (npm **9.x** bundled), Git, and Docker (for optional TA-Lib/compose workflows).
+There are two primary ways to run the Finbot application: using Docker (the recommended method for a full setup) or running it locally with a simpler SQLite database.
 
-> **Note**: The local setup runs in no-auth mode by default, so no authentication is required to access the API endpoints or frontend dashboard.
+### Method 1: Running with Docker (Recommended)
 
-```bash
-git clone <repo-url>
-cd blackboxai-finbot
+This method uses Docker and Docker Compose to run the backend and a PostgreSQL database. It is the recommended setup for development and production.
 
-# 1. Create a Python 3.11 virtualenv and install deps
-py -3.11 -m venv .venv      # Windows (or: python3.11 -m venv .venv)
-.venv\Scripts\activate      # Windows (or: source .venv/bin/activate)
-pip install --upgrade pip
-pip install -r requirements.txt
+**Prerequisites:**
+- Docker and Docker Compose installed and running.
+- Python 3.11
 
-# 2. Prepare environment variables
-cp .env.example .env
-# edit .env and supply real credentials (DB URLs, API keys, broker secrets)
+**Steps:**
 
-# 3. Start the backend API
-uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+1.  **Clone the repository:**
+    ```bash
+    git clone <repo-url>
+    cd blackboxai-finbot
+    ```
 
-# 4. Run market-data ingestion API
-python -m market_data_ingestion.src.api
+2.  **Configure Docker Compose:**
+    - Navigate to the `backend` directory.
+    - Open `backend/docker-compose.yml` and review the `backend` and `db` services. The backend service already points to `postgresql://finbot:finbot123@db:5432/market_data` and declares an explicit dependency on the `db` container; adjust these values only if you have custom credentials.
+    - If you keep an older local copy of the file around, be sure it matches the current repository version so you don’t reintroduce deprecated Compose attributes like `version`.
 
-# 5. Set up frontend environment
-cd frontend
-echo "VITE_API_BASE_URL=http://localhost:8000" > .env
-echo "VITE_API_PREFIX=/api" >> .env
+3.  **Start the services:**
+    - In the `backend` directory, run:
+    ```bash
+    docker compose up -d --build
+    ```
+    This will build the images and start the backend and database containers in the background. If you prefer running Compose from the repository root, pass the file explicitly: `docker compose -f backend/docker-compose.yml up -d --build`.
 
-# 6. Start frontend (React/Tauri)
-npm install && npm run dev
+4.  **Create a user:**
+    - The application uses a PostgreSQL database running inside a Docker container. To create a user, you need to run the `create_user.py` script from your host machine with the `DATABASE_URL` environment variable pointing to the database in the container.
+    - Open a new terminal at the root of the project and run the following command:
 
-# 6. Run the full Python test suite any time with a single command
-cd .. && pytest
-```
-You can also run data collector scripts (backfill, realtime, migrate) via `python data_collector/scripts/<name>.py`.
+    **For PowerShell:**
+    ```powershell
+    $env:DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data"; python create_user.py
+    ```
 
-### Dev runner (quick start)
-Use the consolidated helper to boot core services with mode awareness (`FINBOT_MODE=dev|paper|live`):
-```bash
-python -m scripts.dev_run backend
-python -m scripts.dev_run ingestion
-python -m scripts.dev_run engine
-```
+    **For bash/zsh:**
+    ```bash
+    DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python create_user.py
+    ```
 
-### Dev helper CLI (`scripts/dev.py`)
-- Run the full pytest suite: `python -m scripts.dev tests`
-- Pass additional pytest arguments: `python -m scripts.dev tests -- -k "risk and not slow"`
-- Run lint/format checks (`black`, `isort`, `flake8`, `yamllint`): `python -m scripts.dev lint`
-- Launch backend + ingestion + frontend together: `python -m scripts.dev services` (Ctrl+C to stop all processes)
+5.  **Access the application:**
+    - The backend API will be available at `http://localhost:8000`.
 
+#### Docker troubleshooting (Windows + Docker Desktop)
+- Ensure Docker Desktop is running *before* issuing Compose commands. The quickest sanity check is `docker info`; if it fails or hangs, start Docker Desktop and wait for it to report that the engine is running.
+- When Docker isn’t running, Compose errors look like `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified` or `unable to get image 'redis:7'`. Starting/restarting Docker Desktop resolves this because the named pipe is created by the engine itself.
+- Compose V2 ignores the legacy `version` attribute and prints `the attribute "version" is obsolete`. The Compose files in this repo no longer declare `version`, so update your working tree or delete any stale `docker-compose.yml` copies that still include it.
+- Always run commands from inside the project (or supply `-f path/to/docker-compose.yml`). Running from another directory, such as `C:\Users\mohit`, causes Docker to pick up unrelated Compose files that may still have deprecated syntax.
 
-## Installation Modes
-- Core only (API + DB/auth/logging): `scripts\\install_core.bat` (uses `requirements-core.txt`).
-- Trading stack (core + data providers/analytics): `scripts\\install_trading.bat`.
-- Full stack (core + trading + indicators): `scripts\\install_full.bat` or `pip install -r requirements.txt`.
-- TA-Lib is optional. For local Windows, prefer the pure-Python `ta` indicators shipped in `requirements-indicators.txt`. If you need native TA-Lib, use Docker/WSL2:
-  - Docker: `docker compose -f infrastructure/docker-compose.yml up --build` (ships TA-Lib in images).
-  - WSL2: install `libta-lib0` / `libta-lib-dev` (Debian/Ubuntu) then `pip install ta-lib`.
-  - Otherwise skip TA-Lib; the indicator layer still works via `ta`.
+### Method 2: Running Locally with SQLite
 
-## Environment Modes
-- Templates: `.env.dev`, `.env.paper`, `.env.live` (copy to `.env` or pass with `uvicorn --env-file`).
-- Modes: `dev` = safe sandbox/mock data; `paper` = broker sandbox/paper trading; `live` = real brokers (requires `FINBOT_LIVE_TRADING_CONFIRM=true`).
-- Example: `uvicorn backend.app.main:app --reload --env-file .env.dev`
-- Live broker calls are blocked unless `FINBOT_MODE=live` **and** `FINBOT_LIVE_TRADING_CONFIRM=true`.
-- HTTPS redirection is **disabled by default** for local dev to avoid browser `ERR_NETWORK` on login; set `ENFORCE_HTTPS=1` when running behind TLS/ingress in staging or production.
+This method is simpler and does not require Docker. It uses a local Python environment and a SQLite database file. This is a good option for quick development or if you have issues with Docker.
 
-## Architecture
-Finbot stitches the frontend, backend, ingestion pipeline, trading engine, AI models, and data collector components together in one stack. View the architecture diagram in [`docs/architecture.md`](docs/architecture.md) for the full Mermaid graph and details.
+**Prerequisites:**
+- Python 3.11
 
-## Running the Full Stack
-```bash
-docker compose -f infrastructure/docker-compose.yml up --build
-```
-The compose file spins up the backend API, PostgreSQL, and the ingestion profiles (dev, staging, sandbox).
+**Steps:**
 
-## Staging Deployment
-- Rebuild and start the staging profile locally with:
-  ```bash
-  docker compose -f infrastructure/docker-compose.yml --profile staging up -d --build backend_api market_data_ingestion_staging
-  # or use the helper: ./infrastructure/scripts/deploy_staging.sh
-  ```
-- The `.github/workflows/ci-cd.yml` job `deploy-staging` builds and pushes `ghcr.io/<org>/<repo>:staging` and then invokes `infrastructure/scripts/deploy_staging.sh` to refresh the staging stack.
-- Run the observability checklist (`/health`, `/api/metrics`, `/api/logs`) documented at `docs/ops/staging_checklist.md` after every deploy.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repo-url>
+    cd blackboxai-finbot
+    ```
+
+2.  **Set up a virtual environment and install dependencies:**
+    ```bash
+    # Create a Python 3.11 virtualenv
+    python -m venv .venv
+    # Activate the virtualenv
+    # Windows:
+    .venv\Scripts\activate
+    # macOS/Linux:
+    # source .venv/bin/activate
+    # Install dependencies
+    pip install -r requirements.txt
+    ```
+
+3.  **Create a user and database:**
+    - A script has been prepared to automatically create the SQLite database and a new user.
+    - Run the following command from the root of the project:
+    ```bash
+    python create_user.py
+    ```
+    This will create a `finbot.db` file in your project root and add a user to it.
+
+4.  **Start the backend API:**
+    ```bash
+    uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+    ```
+
+5.  **Access the application:**
+    - The backend API will be available at `http://localhost:8000`.
+
 
 ## Documentation
 - Start at [`docs/README.md`](./docs/README.md) for architecture, trading loop, AI pipeline, backtest pipeline, and module map.
@@ -141,15 +124,3 @@ The compose file spins up the backend API, PostgreSQL, and the ingestion profile
 - `docs/trading_engine/`: Strategy and backtesting walkthroughs
 - `docs/architecture.md`: Component interaction diagram
 - MVP run guide: [`docs/mvp_guide.md`](./docs/mvp_guide.md) for the paper-mode EMA crossover loop and dashboard.
-
-## CI/CD Troubleshooting
-- **Python version mismatch** – GitHub Actions is pinned to Python `3.11.9`. If the `setup-python` step fails or pytest errors with "requires Python 3.11", recreate your virtualenv: `py -3.11 -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt`.
-- **`pip check` / dependency conflicts** – The CI `Pre-flight checks` stage runs `pip check` before pytest. Re-run locally with `python -m scripts.dev lint` or `pip check` to see the exact package causing the conflict, then align your lock files before pushing.
-- **`yamllint` failures** – Workflow files and `docker-compose.yml` are linted in CI. Run `yamllint .github/workflows/*.yml` (and compose files) locally to spot indentation/tab issues.
-- **Node mismatch / frontend build errors** – The frontend job pins Node `18.x`. If `npm ci` fails locally but not in CI, ensure you are using Node 18 (`nvm use 18`). Conversely, if CI fails, run `npm ci && npm run lint && npm run build` in `frontend/` to reproduce before pushing.
-- **Safety audit failures** – CI runs `python scripts/safety_audit.py`. When it flags missing env vars or secrets, fix your `.env`/repo state before re-running `python -m scripts.dev tests`.
-
-## Future Work
-- Expand AI assistant coverage with more models and knowledge connectors
-- Add a full trading cockpit UI that ties live signals into the frontend
-- Harden the trading engine with deeper risk analytics and backtest replay tools

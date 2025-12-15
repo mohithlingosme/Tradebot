@@ -8,6 +8,12 @@ type TradePayload = {
   side: 'buy' | 'sell'
 }
 
+export type IndicatorsResponse = {
+  timestamp: string[]
+  price: number[]
+  indicators: Record<string, Array<number | null>>
+}
+
 const api = axios.create({
   baseURL: API_URL,
 })
@@ -21,15 +27,14 @@ api.interceptors.request.use((config) => {
 })
 
 export const login = async (username: string, password: string) => {
-  const formData = new FormData()
-  formData.append('username', username)
-  formData.append('password', password)
-  const res = await api.post('/auth/login', formData)
+  const res = await api.post('/auth/login', { username, password })
   return res.data
 }
 
 export const getPortfolio = async () => (await api.get('/portfolio')).data
 export const getPrice = async (symbol: string) => (await api.get(`/price/${symbol}`)).data
 export const placeTrade = async (trade: TradePayload) => (await api.post('/trades', trade)).data
+export const getIndicators = async (symbol: string): Promise<IndicatorsResponse> =>
+  (await api.get(`/indicators/${symbol}`)).data
 
 export default api

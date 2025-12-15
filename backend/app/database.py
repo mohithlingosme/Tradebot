@@ -1,11 +1,14 @@
 import os
 from pathlib import Path
 from typing import Generator
-
+import logging
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
 
 from .config import settings
 from .services.user_service import user_service
+
+logger = logging.getLogger(__name__)
 
 
 def _build_engine(url: str):
@@ -51,11 +54,28 @@ def _ensure_sqlite_writable() -> None:
 
 
 def create_db_and_tables() -> None:
-    """Create database tables."""
-    _ensure_sqlite_writable()
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as session:
-        user_service.ensure_default_users(session)
+    """Create database tables, with a fallback to SQLite if PostgreSQL is unavailable."""
+    global engine
+    try:
+        _ensure_sqlite_writable()
+        SQLModel.metadata.create_all(engine)
+        with Session(engine) as session:
+            user_service.ensure_default_users(session)
+    except OperationalError as e:
+        if "postgres" in str(engine.url):
+            logger.warning(
+                "PostgreSQL connection failed. Falling back to SQLite. "
+                "Please ensure your PostgreSQL server is running or configure DATABASE_URL correctly."
+            )
+            fallback_db_url = "sqlite:///./finbot.db"
+            engine = _build_engine(fallback_db_url)
+            settings.database_url = fallback_db_url
+            _ensure_sqlite_writable()
+            SQLModel.metadata.create_all(engine)
+            with Session(engine) as session:
+                user_service.ensure_default_users(session)
+        else:
+            raise e
 
 
 def get_session() -> Generator[Session, None, None]:
@@ -63,5 +83,3 @@ def get_session() -> Generator[Session, None, None]:
     with Session(engine) as session:
         yield session
 
-
-create_db_and_tables()

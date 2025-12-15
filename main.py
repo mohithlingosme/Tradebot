@@ -1,17 +1,19 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional
+
+import pandas as pd
 from dotenv import load_dotenv
 
 # FastAPI & Network
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 # Database
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean
-from sqlalchemy.orm import Session, sessionmaker, declarative_base
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 # Security
 from passlib.context import CryptContext
@@ -19,6 +21,8 @@ from jose import JWTError, jwt
 
 # Trading
 from alpaca_trade_api.rest import REST
+
+from backend.services import calculate_all_indicators
 
 # ==============================================================================
 # 1. CONFIGURATION
@@ -68,6 +72,9 @@ class Trade(Base):
     price = Column(Float)
     status = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
+    rsi = Column(Float, nullable=True)
+    macd = Column(Float, nullable=True)
+    sma_20 = Column(Float, nullable=True)
 
 class Token(BaseModel):
     access_token: str
@@ -104,6 +111,61 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     user = db.query(User).filter(User.email == email).first()
     if user is None: raise HTTPException(status_code=401)
     return user
+
+
+def _bars_to_dataframe(bars) -> pd.DataFrame:
+    """Normalize Alpaca bar responses into a pandas DataFrame."""
+    if hasattr(bars, "df"):
+        df = bars.df.reset_index()
+    else:
+        try:
+            bar_list = list(bars)  # type: ignore[arg-type]
+        except TypeError:
+            bar_list = []
+        payload = []
+        for bar in bar_list:
+            payload.append(
+                {
+                    "time": getattr(bar, "t", None),
+                    "o": getattr(bar, "o", None),
+                    "h": getattr(bar, "h", None),
+                    "l": getattr(bar, "l", None),
+                    "c": getattr(bar, "c", None),
+                    "v": getattr(bar, "v", None),
+                }
+            )
+        df = pd.DataFrame(payload)
+
+    column_aliases = {
+        "timestamp": "time",
+        "t": "time",
+        "o": "open",
+        "open": "open",
+        "h": "high",
+        "high": "high",
+        "l": "low",
+        "low": "low",
+        "c": "close",
+        "close": "close",
+        "v": "volume",
+        "volume": "volume",
+    }
+    for source, target in column_aliases.items():
+        if source in df.columns:
+            df[target] = df[source]
+
+    required = {"time", "close"}
+    if not required.issubset(df.columns):
+        missing = required - set(df.columns)
+        raise ValueError(f"Missing required columns: {missing}")
+
+    df["time"] = pd.to_datetime(df["time"])
+    numeric_cols = [col for col in ["open", "high", "low", "close", "volume"] if col in df.columns]
+    for col in numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(subset=["close"]).copy()
+    return df
+
 
 # ==============================================================================
 # 5. APP ENDPOINTS
@@ -156,6 +218,37 @@ def get_price(symbol: str, current_user: User = Depends(get_current_user)):
     """Check live price"""
     bar = alpaca.get_latest_bar(symbol.upper())
     return {"symbol": symbol, "price": bar.c, "time": str(bar.t)}
+
+@app.get("/indicators/{symbol}")
+def get_indicators(symbol: str, current_user: User = Depends(get_current_user)):
+    """Return technical indicator snapshots for the requested symbol."""
+    try:
+        bars = alpaca.get_crypto_bars(symbol.upper(), timeframe="1Min", limit=500)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch market data: {exc}") from exc
+
+    try:
+        df = _bars_to_dataframe(bars)
+    except ValueError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if df.empty:
+        raise HTTPException(status_code=404, detail="No market data returned")
+
+    df = df.sort_values("time").reset_index(drop=True)
+    indicator_dict = calculate_all_indicators(df)
+
+    timestamp_series = df["time"].tolist()
+    timestamps = [
+        value.isoformat() if isinstance(value, pd.Timestamp) else str(value) for value in timestamp_series
+    ]
+    prices = df["close"].astype(float).tolist()
+
+    return {
+        "timestamp": timestamps,
+        "price": prices,
+        "indicators": indicator_dict,
+    }
 
 @app.post("/trades")
 def place_trade(trade: TradeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

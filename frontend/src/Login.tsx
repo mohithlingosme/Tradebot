@@ -4,15 +4,15 @@ import { useNavigate } from 'react-router-dom'
 import { login } from './api'
 
 export default function Login() {
-  const [email, setEmail] = useState('admin@finbot.com')
-  const [password, setPassword] = useState('admin123')
+  const [username, setUsername] = useState('admin')
+  const [password, setPassword] = useState('adminpass')
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
   const handleLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     try {
-      const data = await login(email, password)
+      const data = await login(username, password)
       localStorage.setItem('token', data.access_token)
       navigate('/dashboard')
     } catch (err) {
@@ -32,11 +32,11 @@ export default function Login() {
         {error && <div className="mb-4 text-red-400 text-sm text-center">{error}</div>}
 
         <div className="mb-4">
-          <label className="block text-slate-400 text-sm mb-1">Email</label>
+          <label className="block text-slate-400 text-sm mb-1">Username</label>
           <input
             type="text"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className="w-full rounded bg-slate-700 p-2 text-white border border-slate-600 focus:outline-none focus:border-blue-500"
           />
         </div>

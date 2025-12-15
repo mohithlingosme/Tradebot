@@ -1,77 +1,58 @@
-# Version control
+# Version control and tooling
 .git
+.gitignore
+.gitattributes
 .github
-
-# Dependencies
-node_modules
-.ven
-.venv
-.pytest_cache
-
-# IDE
 .vscode
 
-# Python cache
-__pycache__
-*.pyc
+# Python cache & virtualenvs
+__pycache__/
+*.py[cod]
 *.pyo
+.pytest_cache
+.venv
+.venv_old
+.vvenv
 
-# OS
+# Node tooling
+node_modules/
+frontend/node_modules/
+frontend_legacy/node_modules/
+
+# OS junk
 .DS_Store
+Thumbs.db
 
-# Logs
-logs
+# Logs & local databases
+logs/
 *.log
 market_data_ingestion.log
 test.log
 pytest_output.txt
-
-# Databases
 *.db
-test.db
+*.sqlite
+finbot.db
 finbot_db.db
-market_data.db
 finbot_db_news.db
+market_data.db
 
 # Environment files
 .env
-.env.demo
-.env.dev
-.env.live
-.env.paper
+.env.*
+!.env.example
+market_data_ingestion/.env
 
-# Documentation and misc
-*.md
-*.pdf
-*.json
-postman_collection.json
-package.json
-package-lock.json
-pyproject.toml
-pytest.ini
-push_all_branches.sh
-create_user.py
+# Large docs and assets we don't ship in the image
+docs/
+design/
+marketing/
+examples/
+notes/
 
-# Directories not needed in image
-scripts
-docs
-examples
-notes
-marketing
-design
-infrastructure
-backend
-backtester
-common
-data_collector
-database
-execution
-finbot-frontend
-frontend
-risk
-strategies
-tests
-trading_engine
-ai
-ai_models
-ingestion
+# Frontend apps (backend image does not need them)
+frontend/
+frontend_legacy/
+
+# Misc scripts not required at runtime
+scripts/
+infrastructure/
