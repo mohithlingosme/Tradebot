@@ -55,7 +55,7 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
 
     **For PowerShell:**
     ```powershell
-    $env:DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data"; python create_user.py
+    python create_user.py
     ```
 
     **For bash/zsh:**

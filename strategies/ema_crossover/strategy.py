@@ -12,8 +12,8 @@ from strategies.registry import registry
 
 @dataclass
 class EMACrossoverConfig:
-    short_window: int = 9
-    long_window: int = 21
+    short_window: int = 50
+    long_window: int = 200
     timeframe: str = "5m"
     symbol_universe: List[str] = field(default_factory=lambda: ["NIFTY", "BANKNIFTY"])
 
@@ -21,8 +21,8 @@ class EMACrossoverConfig:
 class EMACrossoverStrategy(Strategy):
     """Simple long-only EMA crossover strategy."""
 
-    def __init__(self, config: EMACrossoverConfig | dict | None = None) -> None:
-        super().__init__()
+    def __init__(self, data_feed, config: EMACrossoverConfig | dict | None = None) -> None:
+        super().__init__(data_feed)
         cfg = config or {}
         if isinstance(cfg, dict):
             cfg = EMACrossoverConfig(**cfg)
@@ -47,45 +47,46 @@ class EMACrossoverStrategy(Strategy):
             return price
         return (price - current) * multiplier + current
 
-    def on_bar(self, bar: Candle, state: Dict[str, Any]) -> Signal:
-        """Process a new bar and return a trading signal.
-
-        Args:
-            bar: The new candle/bar data.
-            state: Mutable state dictionary for internal strategy state.
+    def next(self) -> Signal:
+        """Process the latest data and return a trading signal.
 
         Returns:
-            Signal: 'BUY', 'SELL', or 'HOLD' based on strategy logic.
+            Signal: Standardized signal format {'action': 'BUY', 'symbol': 'INFY', 'price': 1500, 'type': 'LIMIT'}.
         """
-        if state['allowed_symbols'] and bar.symbol.upper() not in state['allowed_symbols']:
-            return 'HOLD'
+        # Assuming data_feed provides the latest bar
+        bar = self.data_feed.get_latest_bar()
+        if not bar:
+            return {'action': 'HOLD'}
+
+        if self.state['allowed_symbols'] and bar.symbol.upper() not in self.state['allowed_symbols']:
+            return {'action': 'HOLD'}
         if bar.timeframe and bar.timeframe != self.config.timeframe:
-            return 'HOLD'
+            return {'action': 'HOLD'}
 
         price = bar.close
-        previous_short = state['short_ema']
-        previous_long = state['long_ema']
+        previous_short = self.state['short_ema']
+        previous_long = self.state['long_ema']
 
-        state['short_ema'] = self._update_ema(price, state['short_ema'], state['short_multiplier'])
-        state['long_ema'] = self._update_ema(price, state['long_ema'], state['long_multiplier'])
-        state['ema_history'].append((bar.timestamp, state['short_ema'], state['long_ema']))
+        self.state['short_ema'] = self._update_ema(price, self.state['short_ema'], self.state['short_multiplier'])
+        self.state['long_ema'] = self._update_ema(price, self.state['long_ema'], self.state['long_multiplier'])
+        self.state['ema_history'].append((bar.timestamp, self.state['short_ema'], self.state['long_ema']))
 
         if previous_short is None or previous_long is None:
-            return 'HOLD'
+            return {'action': 'HOLD'}
 
         prev_diff = previous_short - previous_long
-        current_diff = state['short_ema'] - state['long_ema']
+        current_diff = self.state['short_ema'] - self.state['long_ema']
 
-        if prev_diff <= 0 < current_diff and state['position'] != "long":
-            state['position'] = "long"
-            state['last_signal'] = "BUY"
-            return "BUY"
-        elif prev_diff >= 0 > current_diff and state['position'] == "long":
-            state['position'] = "flat"
-            state['last_signal'] = "SELL"
-            return "SELL"
+        if prev_diff <= 0 < current_diff and self.state['position'] != "long":
+            self.state['position'] = "long"
+            self.state['last_signal'] = "BUY"
+            return {'action': 'BUY', 'symbol': bar.symbol, 'price': bar.close, 'type': 'LIMIT'}
+        elif prev_diff >= 0 > current_diff and self.state['position'] == "long":
+            self.state['position'] = "flat"
+            self.state['last_signal'] = "SELL"
+            return {'action': 'SELL', 'symbol': bar.symbol, 'price': bar.close, 'type': 'LIMIT'}
 
-        return 'HOLD'
+        return {'action': 'HOLD'}
 
     @property
     def ema_history(self) -> List[tuple]:
