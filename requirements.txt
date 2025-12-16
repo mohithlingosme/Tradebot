@@ -18,4 +18,5 @@ pandas
 plotly
 backtrader==1.9.76.123
 python-jose[cryptography]
-passlib[bcrypt]
+passlib
+bcrypt==3.2.2

@@ -19,15 +19,25 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 
 ## Getting Started
 
-There are two primary ways to run the Finbot application: using Docker (the recommended method for a full setup) or running it locally with a simpler SQLite database.
+This guide provides instructions on how to set up and run the Finbot application, covering both the backend and frontend components.
 
-### Method 1: Running with Docker (Recommended)
+### Prerequisites
+
+Before you begin, ensure you have the following installed on your system:
+
+-   **Python 3.11**
+-   **Node.js and npm**: Required for running the frontend application.
+-   **Docker and Docker Compose**: Required if you choose to run the backend using Docker.
+
+### Backend Setup
+
+You can run the backend using either Docker (recommended for a full setup) or locally with a simpler SQLite database.
+
+---
+
+#### Method 1: Running with Docker (Recommended)
 
 This method uses Docker and Docker Compose to run the backend and a PostgreSQL database. It is the recommended setup for development and production.
-
-**Prerequisites:**
-- Docker and Docker Compose installed and running.
-- Python 3.11
 
 **Steps:**
 
@@ -37,21 +47,20 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
     cd blackboxai-finbot
     ```
 
-2.  **Configure Docker Compose:**
-    - Navigate to the `backend` directory.
-    - Open `backend/docker-compose.yml` and review the `backend` and `db` services. The backend service already points to `postgresql://finbot:finbot123@db:5432/market_data` and declares an explicit dependency on the `db` container; adjust these values only if you have custom credentials.
-    - If you keep an older local copy of the file around, be sure it matches the current repository version so you don’t reintroduce deprecated Compose attributes like `version`.
+2.  **Configure and Start Docker Services:**
+    -   Navigate to the `backend` directory. The `docker-compose.yml` file is pre-configured to run the backend and a PostgreSQL database.
+    -   From the `backend` directory, run the following command to build and start the services in detached mode:
+        ```bash
+        docker compose up -d --build
+        ```
+    -   This command will:
+        -   Build the Docker image for the backend service.
+        -   Start the `backend` and `db` containers.
+        -   The backend will be accessible at `http://localhost:8000`.
 
-3.  **Start the services:**
-    - In the `backend` directory, run:
-    ```bash
-    docker compose up -d --build
-    ```
-    This will build the images and start the backend and database containers in the background. If you prefer running Compose from the repository root, pass the file explicitly: `docker compose -f backend/docker-compose.yml up -d --build`.
-
-4.  **Create a user:**
-    - The application uses a PostgreSQL database running inside a Docker container. To create a user, you need to run the `create_user.py` script from your host machine with the `DATABASE_URL` environment variable pointing to the database in the container.
-    - Open a new terminal at the root of the project and run the following command:
+3.  **Create a User:**
+    -   The application requires a user to be created in the database.
+    -   Open a new terminal at the root of the project and run the `create_user.py` script. This script connects to the database running inside the Docker container.
 
     **For PowerShell:**
     ```powershell
@@ -63,9 +72,8 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
     DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python create_user.py
     ```
 
-5.  **Seed the database (optional):**
-    - To populate the database with initial data, run the seeding script from the host machine.
-    - Open a new terminal at the root of the project and run the following command:
+4.  **Seed the Database (Optional):**
+    -   To populate the database with initial data, run the seeding script:
 
     **For PowerShell:**
     ```powershell
@@ -77,21 +85,11 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
     DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python seed.py
     ```
 
-6.  **Access the application:**
-    - The backend API will be available at `http://localhost:8000`.
+---
 
-#### Docker troubleshooting (Windows + Docker Desktop)
-- Ensure Docker Desktop is running *before* issuing Compose commands. The quickest sanity check is `docker info`; if it fails or hangs, start Docker Desktop and wait for it to report that the engine is running.
-- When Docker isn’t running, Compose errors look like `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified` or `unable to get image 'redis:7'`. Starting/restarting Docker Desktop resolves this because the named pipe is created by the engine itself.
-- Compose V2 ignores the legacy `version` attribute and prints `the attribute "version" is obsolete`. The Compose files in this repo no longer declare `version`, so update your working tree or delete any stale `docker-compose.yml` copies that still include it.
-- Always run commands from inside the project (or supply `-f path/to/docker-compose.yml`). Running from another directory, such as `C:\Users\mohit`, causes Docker to pick up unrelated Compose files that may still have deprecated syntax.
+#### Method 2: Running Locally with SQLite
 
-### Method 2: Running Locally with SQLite
-
-This method is simpler and does not require Docker. It uses a local Python environment and a SQLite database file. This is a good option for quick development or if you have issues with Docker.
-
-**Prerequisites:**
-- Python 3.11
+This method is simpler and does not require Docker. It uses a local Python environment and a SQLite database file.
 
 **Steps:**
 
@@ -101,42 +99,65 @@ This method is simpler and does not require Docker. It uses a local Python envir
     cd blackboxai-finbot
     ```
 
-2.  **Set up a virtual environment and install dependencies:**
+2.  **Set Up a Virtual Environment:**
+    -   Create and activate a Python 3.11 virtual environment. This isolates the project dependencies.
+        ```bash
+        # Create virtualenv
+        python -m venv .venv
+        
+        # Activate on Windows
+        .venv\Scripts\activate
+        
+        # Activate on macOS/Linux
+        # source .venv/bin/activate
+        ```
+
+3.  **Install Dependencies:**
+    -   Install the required Python packages. Note that we are pinning `bcrypt` to a compatible version.
+        ```bash
+        pip install -r requirements.txt
+        ```
+
+4.  **Create a User and Database:**
+    -   Run the following script to create a `finbot.db` SQLite database file and add a new user to it.
+        ```bash
+        python create_user.py
+        ```
+
+5.  **Seed the Database (Optional):**
+    -   To populate the database with initial data, run the seeding script:
+        ```bash
+        python seed.py
+        ```
+
+6.  **Start the Backend API:**
+    -   Run the backend server using Uvicorn. The `--reload` flag enables hot-reloading.
+        ```bash
+        uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
+        ```
+    -   The backend API will be available at `http://localhost:8000`.
+
+### Frontend Setup (Vite + React)
+
+Follow these steps to run the frontend application.
+
+1.  **Navigate to the Frontend Directory:**
     ```bash
-    # Create a Python 3.11 virtualenv
-    python -m venv .venv
-    # Activate the virtualenv
-    # Windows:
-    .venv\Scripts\activate
-    # macOS/Linux:
-    # source .venv/bin/activate
-    # Install dependencies
-    pip install -r requirements.txt
+    cd frontend
     ```
 
-3.  **Create a user and database:**
-    - A script has been prepared to automatically create the SQLite database and a new user.
-    - Run the following command from the root of the project:
-    ```bash
-    python create_user.py
-    ```
-    This will create a `finbot.db` file in your project root and add a user to it.
+2.  **Install npm Dependencies:**
+    -   Install the required Node.js packages.
+        ```bash
+        npm install
+        ```
 
-4.  **Seed the database (optional):**
-    - To populate the database with initial data, run the seeding script.
-    - Run the following command from the root of the project:
-    ```bash
-    python seed.py
-    ```
-    This will seed the database with default users.
-
-5.  **Start the backend API:**
-    ```bash
-    uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
-    ```
-
-6.  **Access the application:**
-    - The backend API will be available at `http://localhost:8000`.
+3.  **Run the Development Server:**
+    -   Start the Vite development server.
+        ```bash
+        npm run dev
+        ```
+    -   The frontend application will be available at `http://localhost:5173` (Vite's default port).
 
 
 ## Documentation

@@ -1,6 +1,7 @@
 import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 from models import User, Base
 from backend.api.auth import pwd_context
 
@@ -18,14 +19,14 @@ async def create_user():
     async with async_session() as session:
         # Check if user already exists
         result = await session.execute(
-            "SELECT * FROM users WHERE email = :email",
+            text("SELECT * FROM users WHERE email = :email"),
             {"email": "test@example.com"},
         )
         if result.first():
             print("User already exists")
             return
 
-        hashed_password = pwd_context.hash("password")
+        hashed_password = pwd_context.hash("password"[:72])
         new_user = User(
             email="test@example.com",
             hashed_password=hashed_password,
