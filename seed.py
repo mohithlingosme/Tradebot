@@ -3,36 +3,77 @@
 
 import sys
 import os
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
+from passlib.context import CryptContext
 
-# Add the backend directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
+# Add the project root to the Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from sqlmodel import Session
+from models import Base, User
+
 from backend.app.database import engine
-from backend.app.services.user_service import user_service
+async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-def seed_data():
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+async def seed_data():
     """Seeds the database with default users."""
     print("Seeding database...")
 
-    with Session(engine) as session:
-        # Create default admin and user
-        user_service.ensure_default_users(session)
+    # Create tables
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-        # Create a specific user if it doesn't exist
+    async with async_session() as session:
+        # Create admin user
+        admin_email = "admin@example.com"
+        admin_password = "adminpass"
+
+        existing_admin = await session.execute(
+            session.query(User).filter(User.email == admin_email)
+        )
+        if not existing_admin.scalars().first():
+            hashed_password = get_password_hash(admin_password)
+            admin_user = User(
+                email=admin_email,
+                hashed_password=hashed_password,
+                is_active=True
+            )
+            session.add(admin_user)
+            await session.commit()
+            print(f"Created admin user: {admin_email}")
+        else:
+            print("Admin user already exists.")
+
+        # Create specific user
         username = "mohith"
         email = "mohithlingosme0218@gmail.com"
         password = "@Dcmk2664"
 
-        existing_user = user_service.get_user_by_username(session, username)
-        if not existing_user:
-            user = user_service.create_user(session, username, password, email=email)
-            session.commit()
-            print(f"Created user: {user.username} ({user.email})")
+        existing_user = await session.execute(
+            session.query(User).filter(User.email == email)
+        )
+        if not existing_user.scalars().first():
+            hashed_password = get_password_hash(password)
+            user = User(
+                email=email,
+                hashed_password=hashed_password,
+                is_active=True
+            )
+            session.add(user)
+            await session.commit()
+            print(f"Created user: {email}")
         else:
-            print(f"User '{username}' already exists.")
+            print(f"User '{email}' already exists.")
 
     print("Database seeding complete.")
 
 if __name__ == "__main__":
-    seed_data()
+    asyncio.run(seed_data())

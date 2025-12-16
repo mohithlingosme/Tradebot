@@ -1,279 +1,130 @@
-import os
-from datetime import datetime, timedelta
-from typing import Optional
+import argparse
+import time
+import logging
+from datetime import datetime
+from typing import Dict, Any, List
 
-import pandas as pd
-from dotenv import load_dotenv
+# Import FINBOT modules
+from ops.logger import setup_logger
+from ops.dashboard import print_dashboard
+from ops.notifier import TelegramBot
+from risk.risk_manager import RiskManager
+from execution.engine import ExecutionEngine, OrderSide, OrderType
+from strategies.ema_crossover.strategy import EMACrossoverStrategy, EMACrossoverConfig
+from common.market_data import Candle
+from common.env import expand_env_vars
 
-# FastAPI & Network
-from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
+# Mock data feed for demonstration
+class MockDataFeed:
+    def __init__(self):
+        self.price = 1500.0
+        self.timestamp = datetime.now()
 
-# Database
-from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, create_engine
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
-
-# Security
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-
-# Trading
-from alpaca_trade_api.rest import REST
-
-from backend.services import calculate_all_indicators
-
-# ==============================================================================
-# 1. CONFIGURATION
-# ==============================================================================
-load_dotenv()
-
-DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/finbot_db"
-ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")
-ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
-ALPACA_BASE_URL = os.getenv("ALPACA_BASE_URL")
-if ALPACA_BASE_URL and ALPACA_BASE_URL.endswith("/v2"):
-    ALPACA_BASE_URL = ALPACA_BASE_URL[:-3]
-
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey")
-ALGORITHM = "HS256"
-
-# ==============================================================================
-# 2. SETUP
-# ==============================================================================
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# Connect to Alpaca
-alpaca = REST(ALPACA_API_KEY, ALPACA_SECRET_KEY, ALPACA_BASE_URL)
-
-# Security
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-# ==============================================================================
-# 3. MODELS & SCHEMAS
-# ==============================================================================
-class User(Base):
-    __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
-
-class Trade(Base):
-    __tablename__ = "trades"
-    id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String, index=True)
-    side = Column(String)
-    quantity = Column(Float)
-    price = Column(Float)
-    status = Column(String)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    rsi = Column(Float, nullable=True)
-    macd = Column(Float, nullable=True)
-    sma_20 = Column(Float, nullable=True)
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TradeRequest(BaseModel):
-    symbol: str
-    qty: float
-    side: str
-
-# ==============================================================================
-# 4. HELPERS
-# ==============================================================================
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=60)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if email is None: raise HTTPException(status_code=401)
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    user = db.query(User).filter(User.email == email).first()
-    if user is None: raise HTTPException(status_code=401)
-    return user
-
-
-def _bars_to_dataframe(bars) -> pd.DataFrame:
-    """Normalize Alpaca bar responses into a pandas DataFrame."""
-    if hasattr(bars, "df"):
-        df = bars.df.reset_index()
-    else:
-        try:
-            bar_list = list(bars)  # type: ignore[arg-type]
-        except TypeError:
-            bar_list = []
-        payload = []
-        for bar in bar_list:
-            payload.append(
-                {
-                    "time": getattr(bar, "t", None),
-                    "o": getattr(bar, "o", None),
-                    "h": getattr(bar, "h", None),
-                    "l": getattr(bar, "l", None),
-                    "c": getattr(bar, "c", None),
-                    "v": getattr(bar, "v", None),
-                }
-            )
-        df = pd.DataFrame(payload)
-
-    column_aliases = {
-        "timestamp": "time",
-        "t": "time",
-        "o": "open",
-        "open": "open",
-        "h": "high",
-        "high": "high",
-        "l": "low",
-        "low": "low",
-        "c": "close",
-        "close": "close",
-        "v": "volume",
-        "volume": "volume",
-    }
-    for source, target in column_aliases.items():
-        if source in df.columns:
-            df[target] = df[source]
-
-    required = {"time", "close"}
-    if not required.issubset(df.columns):
-        missing = required - set(df.columns)
-        raise ValueError(f"Missing required columns: {missing}")
-
-    df["time"] = pd.to_datetime(df["time"])
-    numeric_cols = [col for col in ["open", "high", "low", "close", "volume"] if col in df.columns]
-    for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-    df = df.dropna(subset=["close"]).copy()
-    return df
-
-
-# ==============================================================================
-# 5. APP ENDPOINTS
-# ==============================================================================
-app = FastAPI(title="Finbot Pro (Live Trading)", version="2.0.0")
-
-# --- CORS FIX IS HERE ---
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:8501"
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,         # Allow specific origins
-    allow_credentials=True,        # Allow cookies/auth headers
-    allow_methods=["*"],           # Allow all methods (GET, POST, etc)
-    allow_headers=["*"],           # Allow all headers
-)
-# ------------------------
-
-@app.get("/")
-def home():
-    return {"status": "online", "mode": "Pro Trading Mode"}
-
-@app.post("/auth/login", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not pwd_context.verify(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
-    
-    access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-# --- TRADING ENDPOINTS ---
-
-@app.get("/portfolio")
-def get_portfolio(current_user: User = Depends(get_current_user)):
-    """See your Money & Positions"""
-    acct = alpaca.get_account()
-    return {
-        "cash": float(acct.cash),
-        "equity": float(acct.equity),
-        "buying_power": float(acct.buying_power)
-    }
-
-@app.get("/price/{symbol}")
-def get_price(symbol: str, current_user: User = Depends(get_current_user)):
-    """Check live price"""
-    bar = alpaca.get_latest_bar(symbol.upper())
-    return {"symbol": symbol, "price": bar.c, "time": str(bar.t)}
-
-@app.get("/indicators/{symbol}")
-def get_indicators(symbol: str, current_user: User = Depends(get_current_user)):
-    """Return technical indicator snapshots for the requested symbol."""
-    try:
-        bars = alpaca.get_crypto_bars(symbol.upper(), timeframe="1Min", limit=500)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to fetch market data: {exc}") from exc
-
-    try:
-        df = _bars_to_dataframe(bars)
-    except ValueError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-    if df.empty:
-        raise HTTPException(status_code=404, detail="No market data returned")
-
-    df = df.sort_values("time").reset_index(drop=True)
-    indicator_dict = calculate_all_indicators(df)
-
-    timestamp_series = df["time"].tolist()
-    timestamps = [
-        value.isoformat() if isinstance(value, pd.Timestamp) else str(value) for value in timestamp_series
-    ]
-    prices = df["close"].astype(float).tolist()
-
-    return {
-        "timestamp": timestamps,
-        "price": prices,
-        "indicators": indicator_dict,
-    }
-
-@app.post("/trades")
-def place_trade(trade: TradeRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Buy or Sell Stock"""
-    # 1. Execute on Alpaca
-    try:
-        order = alpaca.submit_order(
-            symbol=trade.symbol.upper(),
-            qty=trade.qty,
-            side=trade.side.lower(),
-            type='market',
-            time_in_force='gtc'
+    def get_latest_bar(self) -> Candle:
+        # Simulate price movement
+        import random
+        self.price += random.uniform(-5, 5)
+        self.timestamp = datetime.now()
+        return Candle(
+            symbol="NIFTY",
+            timestamp=self.timestamp,
+            open=self.price,
+            high=self.price + 1,
+            low=self.price - 1,
+            close=self.price,
+            volume=1000
         )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
 
-    # 2. Save to Database
-    new_trade = Trade(
-        symbol=trade.symbol.upper(),
-        side=trade.side.lower(),
-        quantity=trade.qty,
-        price=0.0, # Market price isn't known until fill
-        status="submitted"
-    )
-    db.add(new_trade)
-    db.commit()
-    
-    return {"status": "success", "order_id": str(order.id), "symbol": trade.symbol}
+def main():
+    parser = argparse.ArgumentParser(description='FINBOT Trading System')
+    parser.add_argument('--mode', choices=['paper', 'live'], default='paper',
+                       help='Trading mode: paper (simulation) or live')
+    args = parser.parse_args()
+
+    # Load environment variables
+    # expand_env_vars()  # Commented out as it requires a value parameter
+
+    # Setup logging
+    logger = setup_logger()
+
+    # Initialize components
+    notifier = TelegramBot()
+    risk_manager = RiskManager(max_daily_loss=200.0, max_position_size=10)
+    execution_engine = ExecutionEngine(paper_trading=(args.mode == 'paper'))
+
+    # Initialize strategy
+    data_feed = MockDataFeed()
+    strategy_config = EMACrossoverConfig(short_window=5, long_window=10, symbol_universe=["NIFTY"])
+    strategy = EMACrossoverStrategy(data_feed, strategy_config)
+
+    # Portfolio state
+    portfolio_state = {
+        'daily_pnl': 0.0,
+        'current_positions': {},
+        'available_margin': 10000.0,
+        'circuit_limits': {'lower_circuit': 1400.0, 'upper_circuit': 1600.0}
+    }
+
+    active_signals = []
+    last_price = 1500.0
+
+    logger.info(f"FINBOT started in {args.mode} mode")
+
+    try:
+        while True:
+            # Fetch latest data
+            candle = data_feed.get_latest_bar()
+            last_price = candle.close
+
+            # Strategy step
+            signal = strategy.next()
+            if signal['action'] != 'HOLD':
+                logger.info(f"Signal Detected: {signal}")
+                active_signals.append({**signal, 'timestamp': datetime.now().strftime('%H:%M:%S')})
+
+                # Risk check
+                order_dict = {
+                    'symbol': signal['symbol'],
+                    'qty': 1,  # Simplified quantity
+                    'price': signal['price'],
+                    'side': signal['action'],
+                    'type': signal.get('type', 'MARKET')
+                }
+
+                approved, reason = risk_manager.validate_order(order_dict, portfolio_state)
+                if approved:
+                    # Execute order
+                    order_id = execution_engine.place_order(
+                        symbol=order_dict['symbol'],
+                        qty=order_dict['qty'],
+                        side=OrderSide(order_dict['side']),
+                        order_type=OrderType(order_dict['type']),
+                        price=order_dict['price'] if order_dict['type'] == 'LIMIT' else None
+                    )
+
+                    # Alert for filled orders (simplified - in real implementation check order status)
+                    notifier.send_alert(f"Order placed: {signal['action']} {signal['symbol']} @ ₹{signal['price']:.2f}")
+
+                    # Log to CSV in paper mode
+                    if args.mode == 'paper':
+                        import csv
+                        os.makedirs('logs', exist_ok=True)
+                        with open('logs/virtual_orders.csv', 'a', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow([datetime.now(), signal['action'], signal['symbol'], signal['price'], order_id])
+                else:
+                    logger.warning(f"Order rejected: {reason}")
+
+            # Update dashboard
+            print_dashboard(portfolio_state, last_price, active_signals)
+
+            # Sleep
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        logger.info("FINBOT shutting down gracefully")
+        # Save state if needed
+        notifier.send_alert("FINBOT stopped")
+
+if __name__ == "__main__":
+    main()

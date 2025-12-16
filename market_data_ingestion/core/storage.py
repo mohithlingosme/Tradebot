@@ -62,6 +62,10 @@ class DataStorage:
 
     async def disconnect(self):
         """Disconnects from the database."""
+        if self.engine:
+            await self.engine.dispose()
+            logger.info("SQLAlchemy engine disposed")
+
         if self.conn:
             if self.db_type == 'sqlite':
                 await self.conn.close()
@@ -317,6 +321,12 @@ class DataStorage:
         except Exception as e:
             logger.error(f"Database health check failed: {e}")
             return False
+
+    def get_async_session(self):
+        """Returns an async session factory for SQLAlchemy ORM operations."""
+        if not self.session_factory:
+            raise RuntimeError("Database not connected. Call connect() first.")
+        return self.session_factory
 
 async def main():
     # Example usage:

@@ -1,36 +1,39 @@
-#!/usr/bin/env python3
-"""Script to create a new user in the database."""
+import asyncio
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from models import User, Base
+from backend.api.auth import pwd_context
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), 'backend'))
+DATABASE_URL = "sqlite+aiosqlite:///finbot.db"
 
-from sqlmodel import Session
-from backend.app.database import engine, create_db_and_tables
-from backend.app.services.user_service import user_service
+async def create_user():
+    engine = create_async_engine(DATABASE_URL, echo=True)
+    async_session = sessionmaker(
+        engine, expire_on_commit=False, class_=AsyncSession
+    )
 
-def create_user():
-    create_db_and_tables()
-    username = "mohith"
-    email = "mohithlingosme0218@gmail.com"
-    password = "@Dcmk2664"
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-    with Session(engine) as session:
-        # Check if user exists
-        existing = user_service.get_user_by_username(session, username)
-        if existing:
-            print(f"User {username} already exists. Updating password.")
-            existing.hashed_password = user_service.get_password_hash(password)
-            session.add(existing)
-            session.commit()
-            session.refresh(existing)
-            print(f"Updated user: {existing.username} ({existing.email})")
+    async with async_session() as session:
+        # Check if user already exists
+        result = await session.execute(
+            "SELECT * FROM users WHERE email = :email",
+            {"email": "test@example.com"},
+        )
+        if result.first():
+            print("User already exists")
             return
 
-        # Create user
-        user = user_service.create_user(session, username, password, email=email)
-        session.commit()
-        print(f"Created user: {user.username} ({user.email})")
+        hashed_password = pwd_context.hash("password")
+        new_user = User(
+            email="test@example.com",
+            hashed_password=hashed_password,
+            is_active=True,
+        )
+        session.add(new_user)
+        await session.commit()
+        print("User created successfully")
 
 if __name__ == "__main__":
-    create_user()
+    asyncio.run(create_user())

@@ -63,7 +63,21 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
     DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python create_user.py
     ```
 
-5.  **Access the application:**
+5.  **Seed the database (optional):**
+    - To populate the database with initial data, run the seeding script from the host machine.
+    - Open a new terminal at the root of the project and run the following command:
+
+    **For PowerShell:**
+    ```powershell
+    python seed.py
+    ```
+
+    **For bash/zsh:**
+    ```bash
+    DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python seed.py
+    ```
+
+6.  **Access the application:**
     - The backend API will be available at `http://localhost:8000`.
 
 #### Docker troubleshooting (Windows + Docker Desktop)
@@ -108,12 +122,20 @@ This method is simpler and does not require Docker. It uses a local Python envir
     ```
     This will create a `finbot.db` file in your project root and add a user to it.
 
-4.  **Start the backend API:**
+4.  **Seed the database (optional):**
+    - To populate the database with initial data, run the seeding script.
+    - Run the following command from the root of the project:
+    ```bash
+    python seed.py
+    ```
+    This will seed the database with default users.
+
+5.  **Start the backend API:**
     ```bash
     uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
     ```
 
-5.  **Access the application:**
+6.  **Access the application:**
     - The backend API will be available at `http://localhost:8000`.
 
 
