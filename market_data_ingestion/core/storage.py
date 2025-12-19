@@ -123,6 +123,24 @@ class DataStorage:
                     )
                     """
                 )
+                await self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS order_book_snapshots (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        symbol VARCHAR(40) NOT NULL,
+                        ts_utc DATETIME NOT NULL,
+                        best_bid REAL,
+                        best_ask REAL,
+                        bids TEXT NOT NULL,
+                        asks TEXT NOT NULL,
+                        provider VARCHAR(50) NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                await self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_order_book_symbol_ts ON order_book_snapshots(symbol, ts_utc DESC)"
+                )
                 await self.conn.commit()
             elif self.db_type == 'postgresql':
                 await self.conn.execute(
@@ -166,6 +184,24 @@ class DataStorage:
                         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
                     )
                     """
+                )
+                await self.conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS order_book_snapshots (
+                        id SERIAL PRIMARY KEY,
+                        symbol VARCHAR(40) NOT NULL,
+                        ts_utc TIMESTAMPTZ NOT NULL,
+                        best_bid REAL,
+                        best_ask REAL,
+                        bids JSONB NOT NULL,
+                        asks JSONB NOT NULL,
+                        provider VARCHAR(50) NOT NULL,
+                        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                await self.conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_order_book_symbol_ts ON order_book_snapshots(symbol, ts_utc DESC)"
                 )
             logger.info(f"Created tables in {self.db_type} database")
         except Exception as e:
@@ -260,6 +296,50 @@ class DataStorage:
                 )
         except Exception as exc:
             logger.error(f"Error inserting DLQ event: {exc}")
+            raise
+
+    async def insert_order_book_snapshot(self, snapshot: Dict[str, Any]):
+        """Persist an order book snapshot when depth data is available."""
+        if not snapshot.get("bids") or not snapshot.get("asks"):
+            return
+        try:
+            bids = snapshot["bids"]
+            asks = snapshot["asks"]
+            best_bid = snapshot.get("best_bid")
+            best_ask = snapshot.get("best_ask")
+            if self.db_type == 'sqlite':
+                await self.conn.execute(
+                    """
+                    INSERT INTO order_book_snapshots (symbol, ts_utc, best_bid, best_ask, bids, asks, provider)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        snapshot["symbol"],
+                        snapshot["ts_utc"],
+                        best_bid,
+                        best_ask,
+                        json.dumps(bids),
+                        json.dumps(asks),
+                        snapshot["provider"],
+                    ),
+                )
+                await self.conn.commit()
+            else:
+                await self.conn.execute(
+                    """
+                    INSERT INTO order_book_snapshots (symbol, ts_utc, best_bid, best_ask, bids, asks, provider)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    """,
+                    snapshot["symbol"],
+                    snapshot["ts_utc"],
+                    best_bid,
+                    best_ask,
+                    bids,
+                    asks,
+                    snapshot["provider"],
+                )
+        except Exception as exc:
+            logger.error(f"Error inserting order book snapshot: {exc}")
             raise
 
     async def fetch_last_n_candles(self, symbol: str, interval: str, limit: int = 50) -> List[Dict[str, Any]]:

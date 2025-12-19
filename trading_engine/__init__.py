@@ -11,7 +11,7 @@ This package contains the core trading engine components:
 from .strategy_manager import StrategyManager, BaseStrategy, SignalStrength, StrategyPerformance
 try:
     from .backtester import Backtester, BacktestConfig, BacktestResult, BacktestMode, Trade
-except ModuleNotFoundError:
+except ImportError:
     Backtester = None
     BacktestConfig = None
     BacktestResult = None
@@ -19,13 +19,13 @@ except ModuleNotFoundError:
     Trade = None
 try:
     from .strategies import AdaptiveRSIMACDStrategy, StrategyConfig, SignalType
-except ModuleNotFoundError:
+except ImportError:
     AdaptiveRSIMACDStrategy = None
     StrategyConfig = None
     SignalType = None
 try:
     from .live_trading_engine import LiveTradingEngine, LiveTradingConfig, TradingMode, EngineState, ExecutionResult
-except ModuleNotFoundError:
+except ImportError:
     LiveTradingEngine = None
     LiveTradingConfig = None
     TradingMode = None

@@ -89,6 +89,20 @@ class RealtimeIngestionPipeline:
             INGESTION_REQUESTS.labels(provider=self.adapter_name, symbol=tick.symbol, status="success").inc()
             metrics_collector.update_last_successful_ingestion(self.adapter_name)
             self.last_message_at = tick.ts_utc
+            if tick.bids and tick.asks:
+                depth_payload = {
+                    "symbol": tick.symbol,
+                    "ts_utc": tick.ts_utc.isoformat(),
+                    "best_bid": tick.bids[0].price if tick.bids else None,
+                    "best_ask": tick.asks[0].price if tick.asks else None,
+                    "bids": [level.to_dict() for level in tick.bids],
+                    "asks": [level.to_dict() for level in tick.asks],
+                    "provider": self.adapter_name,
+                }
+                try:
+                    await self.storage.insert_order_book_snapshot(depth_payload)
+                except Exception as depth_exc:  # pragma: no cover - logging only
+                    logger.warning("Failed to persist order book snapshot: %s", depth_exc)
         except Exception as exc:
             logger.error(f"Failed to store tick {tick.symbol}: {exc}")
             INGESTION_REQUESTS.labels(provider=self.adapter_name, symbol=tick.symbol, status="error").inc()

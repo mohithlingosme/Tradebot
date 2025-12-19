@@ -9,6 +9,8 @@ Finbot is an AI-enabled trading research and execution platform that combines re
 - **AI models**: Pipelines, safety tooling, and assistant responses for finance questions.
 - **Data collector scripts**: Standalone helpers for backfills, migrations, and mock ingestion.
 - **Observability + docs**: Docker, compose profiles, Kubernetes helpers, and design docs.
+- **Analytics layer**: Volatility regime detection powered by scikit-learn plus live order book imbalance analytics.
+
 
 ## Tech Stack
 - **Language**: Python 3.11.9 (CI verified), Pydantic 2, FastAPI, SQLModel, SQLAlchemy
@@ -29,13 +31,29 @@ Before you begin, ensure you have the following installed on your system:
 -   **Node.js and npm**: Required for running the frontend application.
 -   **Docker and Docker Compose**: Required if you choose to run the backend using Docker.
 
+### One-Command Full Stack (Docker Compose)
+
+To bootstrap the entire stack (TimescaleDB + backend API + React dashboard + Grafana) run:
+
+```bash
+docker compose up --build
+```
+
+Services:
+- Backend API: `http://localhost:8000`
+- React dashboard: `http://localhost:4173`
+- Grafana (pre-provisioned Postgres datasource + Finbot dashboard): `http://localhost:3000` (`admin` / `admin`)
+- TimescaleDB: `localhost:5432` (`finbot` / `finbot`)
+
+The compose file automatically enables the Timescale extension and hypertables for `candles`, `ticks`, and `order_book_snapshots`.
+
 ### Backend Setup
 
 You can run the backend using either Docker (recommended for a full setup) or locally with a simpler SQLite database.
 
 ---
 
-#### Method 1: Running with Docker (Recommended)
+#### Method 1: Running with Docker (API + DB)
 
 This method uses Docker and Docker Compose to run the backend and a PostgreSQL database. It is the recommended setup for development and production.
 
@@ -48,15 +66,11 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
     ```
 
 2.  **Configure and Start Docker Services:**
-    -   Navigate to the `backend` directory. The `docker-compose.yml` file is pre-configured to run the backend and a PostgreSQL database.
-    -   From the `backend` directory, run the following command to build and start the services in detached mode:
+    -   From the repository root run:
         ```bash
-        docker compose up -d --build
+        docker compose up -d backend timescale
         ```
-    -   This command will:
-        -   Build the Docker image for the backend service.
-        -   Start the `backend` and `db` containers.
-        -   The backend will be accessible at `http://localhost:8000`.
+    -   This command builds the API image, starts TimescaleDB with the hypertable init script, and exposes the backend at `http://localhost:8000`.
 
 3.  **Create a User:**
     -   The application requires a user to be created in the database.
@@ -121,7 +135,7 @@ This method is simpler and does not require Docker. It uses a local Python envir
 4.  **Create a User and Database:**
     -   Run the following script to create a `finbot.db` SQLite database file and add a new user to it.
         ```bash
-        python create_user.py
+        python create_user.py --email admin@finbot.com --password @Dcmk2664
         ```
 
 5.  **Seed the Database (Optional):**
@@ -167,3 +181,8 @@ Follow these steps to run the frontend application.
 - `docs/trading_engine/`: Strategy and backtesting walkthroughs
 - `docs/architecture.md`: Component interaction diagram
 - MVP run guide: [`docs/mvp_guide.md`](./docs/mvp_guide.md) for the paper-mode EMA crossover loop and dashboard.
+
+## Advanced Analytics APIs
+- `GET /analytics/regime/{symbol}` returns machine-learned volatility regimes (high/low), confidence, realized volatility, and ATR. The React dashboard visualizes the history and confidence bands.
+- `GET /analytics/order-book/{symbol}` surfaces the latest top-of-book liquidity snapshot, computed imbalance, spread metrics, and depth levels built from the new `order_book_snapshots` hypertable.
+- The new `order_book_imbalance` strategy consumes Level 2 data via `data_feed.get_latest_order_book` to produce microstructure-aware buy/sell/exit signals.

@@ -9,7 +9,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 import tenacity
 import websockets
 
-from market_data_ingestion.adapters.base import BaseMarketDataAdapter, NormalizedTick
+from market_data_ingestion.adapters.base import BaseMarketDataAdapter, NormalizedTick, OrderBookLevel
 from market_data_ingestion.src.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -138,6 +138,10 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
         else:
             ts = datetime.fromtimestamp(timestamp or time.time(), tz=timezone.utc)
 
+        depth = data.get("depth") or {}
+        bids = self._normalize_levels(depth.get("buy") or data.get("bids"))
+        asks = self._normalize_levels(depth.get("sell") or data.get("asks"))
+
         return NormalizedTick(
             symbol=str(data.get("instrument_token", "UNKNOWN")),
             ts_utc=ts,
@@ -145,7 +149,22 @@ class KiteWebSocketAdapter(BaseMarketDataAdapter):
             volume=float(data.get("volume", 0) or data.get("last_quantity", 0) or 0),
             provider=self.provider,
             raw=data,
+            bids=bids,
+            asks=asks,
         )
+
+    def _normalize_levels(self, payload: Any) -> List[OrderBookLevel] | None:
+        if not payload:
+            return None
+        levels: List[OrderBookLevel] = []
+        for level in payload:
+            try:
+                price = float(level.get("price") if isinstance(level, dict) else level[0])
+                size = float(level.get("size") if isinstance(level, dict) and "size" in level else level[1])
+            except Exception:
+                continue
+            levels.append(OrderBookLevel(price=price, size=size))
+        return levels or None
 
     async def realtime_connect(self, symbols: List[str]):
         """Connects to the WebSocket and subscribes to the given symbols."""

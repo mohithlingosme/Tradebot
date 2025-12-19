@@ -56,6 +56,17 @@ class MockWebSocketServer:
                     new_price = base_price * (1 + price_change)
                     base_prices[symbol] = new_price
 
+                    depth = {
+                        "buy": [
+                            {"price": round(new_price - 0.05 * level, 2), "size": random.randint(50, 500)}
+                            for level in range(1, 6)
+                        ],
+                        "sell": [
+                            {"price": round(new_price + 0.05 * level, 2), "size": random.randint(50, 500)}
+                            for level in range(1, 6)
+                        ],
+                    }
+
                     tick_data = {
                         "instrument": symbol,
                         "timestamp": time.time(),
@@ -66,6 +77,7 @@ class MockWebSocketServer:
                         "low": round(base_price * 0.98, 2),
                         "close": round(new_price, 2),
                         "volume": random.randint(1000, 10000),
+                        "depth": depth,
                     }
 
                     await websocket.send(json.dumps(tick_data))

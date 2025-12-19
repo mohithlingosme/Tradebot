@@ -1,56 +1,5 @@
 # FinBot Roadmap - Currently in Phase 6: Future / Advanced (Institutional Features)
 
-## 📊 Phase 1: Data Infrastructure (Weeks 2-3)
-The "Eyes" of the system. Ingesting market data and preparing it for strategy logic
-
-## 🧠 Phase 2: Strategy Engine (Weeks 4-5)
-FINBOT: Strategy Implementation Roadmap
-
-## 🧠 Phase 2: Strategy Engine (Weeks 4-5)
-FINBOT: Strategy Implementation Roadmap
-
-Goal: Implement, validate, and backtest the strategy engine and the following 23 technical strategies.
-Location: strategies/ directory
-Status: Pending Implementation
-
-## 🛡 Phase 3: Risk Management (Week 6)
-The "Shield". Critical for a student developer to prevent capital erosion.
-
-### Risk Engine (risk_manager.py)
-- [x] Hard Stop (Kill Switch): Logic to halt ALL trading if Daily Loss > ₹200
-- [x] Position Limits: Check if current_position + new_order > max_allowed
-- [x] Time Filters: Block new trades after 3:15 PM (Intraday auto-square off risk)
-
-### Sanity Checks
-- [x] Price Check: Reject order if price is outside Daily Circuit Limits
-- [x] Quantity Check: Reject order if Quantity * Price > Available Margin
-
-## ⚡ Phase 4: Execution Engine (Weeks 7-8)
-The "Hands". Sending orders to the exchange.
-
-### Order Management System (execution/engine.py)
-- [x] Implement place_order(symbol, qty, side, type)
-- [x] Implement cancel_order(order_id)
-- [x] Implement modify_order(order_id, new_price)
-
-### Order State Management
-- [x] Track order status: PENDING -> FILLED / REJECTED / CANCELLED
-- [x] Update PositionState on successful fill
-- [x] Log slippage (Difference between Signal Price vs. Actual Fill Price)
-
-## 🚀 Phase 5: Operations & Go-Live (Weeks 9-10)
-The "Pulse". Monitoring and running the bot.
-
-### Paper Trading Mode (Dry Run)
-- [x] Run system connected to live data
-- [x] Instead of API calls, log "Virtual Orders" to a text file
-- [x] Review logs after 1 week for logic errors
-
-### Monitoring & Logging
-- [x] Configure logging module (Save logs to logs/trading.log)
-- [x] Create a simple console dashboard (Print PnL, Open Positions every minute)
-- [x] (Optional) Set up Telegram Bot to send trade alerts to your phone
-
 ### Live Deployment (Small Capital)
 - [ ] Deploy on local machine (or AWS/GCP Free Tier if comfortable)
 - [ ] Fund account with minimum viable capital
@@ -59,11 +8,11 @@ The "Pulse". Monitoring and running the bot.
 ## 🔮 Phase 6: Future / Advanced (Institutional Features)
 Post-MVP goals from the Blueprint PDF.
 
-- [ ] Machine Learning Layer: Implement Regime Detection (High/Low Volatility)
+- [x] Machine Learning Layer: Implement Regime Detection (High/Low Volatility)
 - [x] Dockerization: Containerize the application for cloud deployment
-- [ ] Database: Move from CSV to PostgreSQL/TimescaleDB
-- [ ] Advanced Strategies: Order Book Imbalance (requires L2 data)
-- [ ] Web Dashboard: Build a React/Grafana frontend for performance analytics
+- [x] Database: Move from CSV to PostgreSQL/TimescaleDB
+- [x] Advanced Strategies: Order Book Imbalance (requires L2 data)
+- [x] Web Dashboard: Build a React/Grafana frontend for performance analytics
 I have created a "Finbot Build Completion Tasks" list in your notes to help you track your progress.
 
 Here is the detailed breakdown of those tasks to guide you through the build process:
@@ -232,13 +181,13 @@ The "Pulse". Monitoring and running the bot.
 
 Post-MVP goals from the Blueprint PDF.
 
-[ ] Machine Learning Layer: Implement Regime Detection (High/Low Volatility)
+[x] Machine Learning Layer: Implement Regime Detection (High/Low Volatility)
 
-[ ] Dockerization: Containerize the application for cloud deployment
+[x] Dockerization: Containerize the application for cloud deployment
 
-[ ] Database: Move from CSV to PostgreSQL/TimescaleDB
+[x] Database: Move from CSV to PostgreSQL/TimescaleDB
 
-[ ] Advanced Strategies: Order Book Imbalance (requires L2 data)
+[x] Advanced Strategies: Order Book Imbalance (requires L2 data)
 
-[ ] Web Dashboard: Build a React/Grafana frontend for performance analytics
+[x] Web Dashboard: Build a React/Grafana frontend for performance analytics
 ## 📊 Phase 1: Data Infrastructure (Weeks 2-3)

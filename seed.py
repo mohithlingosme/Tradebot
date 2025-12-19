@@ -4,6 +4,7 @@
 import sys
 import os
 import asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +38,7 @@ async def seed_data():
         admin_password = "adminpass"
 
         existing_admin = await session.execute(
-            session.query(User).filter(User.email == admin_email)
+            select(User).filter(User.email == admin_email)
         )
         if not existing_admin.scalars().first():
             hashed_password = get_password_hash(admin_password)
@@ -58,7 +59,7 @@ async def seed_data():
         password = "@Dcmk2664"
 
         existing_user = await session.execute(
-            session.query(User).filter(User.email == email)
+            select(User).filter(User.email == email)
         )
         if not existing_user.scalars().first():
             hashed_password = get_password_hash(password)

@@ -236,3 +236,4 @@ indicators_py_files.txt
 prompt.txt
 postman_collection.json
 push_all_branches.sh
+.venv_cli/

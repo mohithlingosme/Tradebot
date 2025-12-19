@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+  timescale:
+    image: timescale/timescaledb-ha:pg16.2
+    environment:
+      POSTGRES_DB: finbot
+      POSTGRES_USER: finbot
+      POSTGRES_PASSWORD: finbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+      - ./infrastructure/timescale-init.sql:/docker-entrypoint-initdb.d/timescale-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finbot -d finbot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://finbot:finbot@timescale:5432/finbot
+      FRONTEND_ORIGINS: http://localhost:4173,http://frontend:80
+      SECRET_KEY: super-secret-key
+    depends_on:
+      timescale:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_URL: http://backend:8000
+    ports:
+      - "4173:80"
+    depends_on:
+      - backend
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infrastructure/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./infrastructure/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./infrastructure/grafana/dashboards/json:/var/lib/grafana/dashboards
+    depends_on:
+      timescale:
+        condition: service_healthy
+
+volumes:
+  timescale_data:
+  grafana_data:

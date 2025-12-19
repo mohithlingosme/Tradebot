@@ -1,4 +1,4 @@
-from .base import BaseMarketDataAdapter, NormalizedTick
+from .base import BaseMarketDataAdapter, NormalizedTick, OrderBookLevel
 from .alphavantage import AlphaVantageAdapter
 from .yfinance import YFinanceAdapter
 from .kite_ws import KiteWebSocketAdapter

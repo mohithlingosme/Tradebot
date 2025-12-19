@@ -12,8 +12,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import type { IndicatorsResponse } from './api'
-import { getIndicators, getPortfolio, placeTrade } from './api'
+import type {
+  IndicatorsResponse,
+  PositionSnapshot,
+  RegimeAnalytics,
+  OrderBookAnalytics,
+} from './api'
+import {
+  getIndicators,
+  getPortfolio,
+  getPositions,
+  getRegimeAnalytics,
+  getOrderBookAnalytics,
+  placeTrade,
+} from './api'
 
 type Portfolio = {
   cash: number
@@ -37,11 +49,41 @@ const COLOR_PALETTE = [
   '#22d3ee',
 ]
 
+const currencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+const decimalFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+const quantityFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 4,
+})
+
+const percentFormatter = new Intl.NumberFormat('en-US', {
+  style: 'percent',
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+})
+
 const formatMetric = (value?: number | null, formatAsCurrency = false) => {
   if (value === undefined || value === null || Number.isNaN(value)) {
     return PRICE_FALLBACK
   }
-  return formatAsCurrency ? `$${value.toFixed(2)}` : value.toFixed(2)
+  return formatAsCurrency ? currencyFormatter.format(value) : decimalFormatter.format(value)
+}
+
+const formatQuantity = (value?: number | null) => {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return PRICE_FALLBACK
+  }
+  return quantityFormatter.format(value)
 }
 
 const formatIndicatorLabel = (key: string) =>
@@ -72,6 +114,17 @@ const DIRECTION_META: Record<TrendDirection, { label: string; className: string 
   positive: { label: 'Positive', className: 'text-green-400' },
   negative: { label: 'Negative', className: 'text-red-400' },
   neutral: { label: 'Neutral', className: 'text-slate-400' },
+}
+
+const REGIME_META: Record<string, { label: string; className: string }> = {
+  high_volatility: { label: 'High Volatility', className: 'text-orange-400' },
+  low_volatility: { label: 'Low Volatility', className: 'text-emerald-400' },
+}
+
+const ORDER_STATE_META: Record<string, { label: string; className: string }> = {
+  bullish: { label: 'Bid Dominant', className: 'text-green-400' },
+  bearish: { label: 'Ask Dominant', className: 'text-red-400' },
+  balanced: { label: 'Balanced', className: 'text-slate-400' },
 }
 
 const extractTrend = (series: Array<number | null>): { value: number | null; direction: TrendDirection } => {
@@ -106,7 +159,12 @@ export default function Dashboard() {
   const [selectedOverlays, setSelectedOverlays] = useState<string[]>([])
   const [selectedOscillators, setSelectedOscillators] = useState<string[]>([])
   const [priceSnapshot, setPriceSnapshot] = useState<{ price: number; time: string } | null>(null)
+  const [positions, setPositions] = useState<PositionSnapshot[]>([])
   const [loadingIndicators, setLoadingIndicators] = useState(false)
+  const [regimeAnalytics, setRegimeAnalytics] = useState<RegimeAnalytics | null>(null)
+  const [orderBookAnalytics, setOrderBookAnalytics] = useState<OrderBookAnalytics | null>(null)
+  const [loadingRegime, setLoadingRegime] = useState(false)
+  const [loadingOrderBook, setLoadingOrderBook] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -152,6 +210,50 @@ export default function Dashboard() {
     fetchIndicators()
   }, [fetchIndicators])
 
+  const fetchRegimeSnapshot = useCallback(async () => {
+    setLoadingRegime(true)
+    try {
+      const data = await getRegimeAnalytics(symbol)
+      setRegimeAnalytics(data)
+    } catch (err) {
+      console.error(err)
+      setRegimeAnalytics(null)
+    } finally {
+      setLoadingRegime(false)
+    }
+  }, [symbol])
+
+  const fetchOrderBookSnapshot = useCallback(async () => {
+    setLoadingOrderBook(true)
+    try {
+      const data = await getOrderBookAnalytics(symbol)
+      setOrderBookAnalytics(data)
+    } catch (err) {
+      console.error(err)
+      setOrderBookAnalytics(null)
+    } finally {
+      setLoadingOrderBook(false)
+    }
+  }, [symbol])
+
+  useEffect(() => {
+    fetchRegimeSnapshot()
+    fetchOrderBookSnapshot()
+  }, [fetchRegimeSnapshot, fetchOrderBookSnapshot])
+
+  const fetchPositions = useCallback(async () => {
+    try {
+      const snapshot = await getPositions()
+      setPositions(snapshot)
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchPositions()
+  }, [fetchPositions])
+
   const chartRows: ChartRow[] = useMemo(() => {
     if (!indicatorData) return []
     const rows: ChartRow[] = indicatorData.timestamp.map((time, idx) => ({
@@ -166,6 +268,24 @@ export default function Dashboard() {
     })
     return rows
   }, [indicatorData])
+
+  const regimeChartData = useMemo(() => {
+    if (!regimeAnalytics) return []
+    return regimeAnalytics.history.map((point) => ({
+      time: new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      probability: point.probability,
+      label: point.label,
+    }))
+  }, [regimeAnalytics])
+
+  const orderBookHistory = useMemo(() => {
+    if (!orderBookAnalytics) return []
+    return orderBookAnalytics.history.map((point) => ({
+      time: new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      imbalance: point.imbalance,
+      state: point.state,
+    }))
+  }, [orderBookAnalytics])
 
   const indicatorColorMap = useMemo(() => {
     const map = new Map<string, string>()
@@ -211,12 +331,41 @@ export default function Dashboard() {
   return metrics
 }, [indicatorData, availableIndicators])
 
+  const activePosition = useMemo(() => {
+    if (!positions.length) return null
+    const normalizedSymbol = symbol.toUpperCase()
+    return (
+      positions.find((pos) => pos.symbol === normalizedSymbol) ??
+      positions.find((pos) => pos.status === 'open') ??
+      positions[positions.length - 1]
+    )
+  }, [positions, symbol])
+
+  const positionMeta = useMemo(() => {
+    if (!activePosition) return null
+    const directionLabel =
+      activePosition.direction === 'long'
+        ? 'Long'
+        : activePosition.direction === 'short'
+          ? 'Short'
+          : 'Flat'
+    const directionClass =
+      activePosition.direction === 'long'
+        ? 'text-green-400'
+        : activePosition.direction === 'short'
+          ? 'text-red-400'
+          : 'text-slate-400'
+    const statusClass = activePosition.status === 'open' ? 'text-green-400' : 'text-slate-400'
+    return { directionLabel, directionClass, statusClass }
+  }, [activePosition])
+
   const handleTrade = async (side: 'buy' | 'sell') => {
     try {
       await placeTrade({ symbol, qty, side })
       alert(`${side.toUpperCase()} order placed`)
       const refreshed = await getPortfolio()
       setPortfolio(refreshed)
+      await fetchPositions()
     } catch (err) {
       console.error(err)
       alert('Trade Failed')
@@ -260,7 +409,7 @@ export default function Dashboard() {
         ].map((item) => (
           <div key={item.label} className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
             <h3 className="text-slate-400 text-sm font-medium">{item.label}</h3>
-            <p className={`text-2xl font-bold mt-2 ${item.color}`}>${item.val.toLocaleString()}</p>
+            <p className={`text-2xl font-bold mt-2 ${item.color}`}>{formatMetric(item.val, true)}</p>
           </div>
         ))}
       </div>
@@ -338,14 +487,19 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
                     <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 12 }} />
                     <YAxis
-                      tickFormatter={(value) => `$${Number(value).toFixed(2)}`}
+                      tickFormatter={(value) => currencyFormatter.format(Number(value))}
                       tick={{ fill: '#94a3b8', fontSize: 12 }}
                       width={70}
                     />
                     <Tooltip
                       contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
                       labelStyle={{ color: '#94a3b8' }}
-                      formatter={(value: number, name) => [`${value.toFixed(2)}`, formatIndicatorLabel(String(name))]}
+                      formatter={(value: number, name) => [
+                        name === 'price'
+                          ? currencyFormatter.format(value)
+                          : decimalFormatter.format(value),
+                        formatIndicatorLabel(String(name)),
+                      ]}
                     />
                     <Area
                       type="monotone"
@@ -389,7 +543,10 @@ export default function Dashboard() {
                       <Tooltip
                         contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
                         labelStyle={{ color: '#94a3b8' }}
-                        formatter={(value: number) => [`${value.toFixed(2)}`, formatIndicatorLabel(key)]}
+                        formatter={(value: number) => [
+                          decimalFormatter.format(value),
+                          formatIndicatorLabel(key),
+                        ]}
                       />
                       <Line
                         type="monotone"
@@ -417,7 +574,7 @@ export default function Dashboard() {
             <div className="p-4 bg-slate-700/40 rounded mb-4">
               <p className="text-xs text-slate-400 mb-1">Last Update</p>
               <div className="text-2xl font-semibold">
-                {priceSnapshot ? `$${priceSnapshot.price.toFixed(2)}` : PRICE_FALLBACK}
+                {priceSnapshot ? formatMetric(priceSnapshot.price, true) : PRICE_FALLBACK}
               </div>
               <p className="text-xs text-slate-500">
                 {priceSnapshot ? new Date(priceSnapshot.time).toLocaleString() : 'Awaiting data'}
@@ -470,6 +627,230 @@ export default function Dashboard() {
               >
                 SELL {symbol}
               </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 className="text-xl font-bold mb-4">📊 Position Monitor</h2>
+            {activePosition ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-slate-400">Asset</p>
+                    <p className="text-2xl font-semibold">{activePosition.symbol}</p>
+                  </div>
+                  {positionMeta && (
+                    <span className={`text-sm font-semibold ${positionMeta.directionClass}`}>
+                      {positionMeta.directionLabel}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-400">Position Size</p>
+                    <p className="text-lg font-semibold">
+                      {formatQuantity(Math.abs(activePosition.qty))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">Entry Price</p>
+                    <p className="text-lg font-semibold">{formatMetric(activePosition.entry_price, true)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">Mark Price</p>
+                    <p className="text-lg font-semibold">{formatMetric(activePosition.mark_price, true)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">Status</p>
+                    <p className={`text-lg font-semibold ${positionMeta?.statusClass ?? 'text-slate-400'}`}>
+                      {activePosition.status === 'open' ? 'Open' : 'Closed'}
+                    </p>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Updated {activePosition.last_updated ? new Date(activePosition.last_updated).toLocaleString() : 'N/A'}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">
+                No trades placed yet. Execute a trade to see live position details.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mt-10">
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-xs text-slate-400">Volatility Regime</p>
+              <h3
+                className={`text-2xl font-bold ${
+                  regimeAnalytics ? REGIME_META[regimeAnalytics.current_regime]?.className ?? 'text-slate-200' : 'text-slate-500'
+                }`}
+              >
+                {regimeAnalytics
+                  ? REGIME_META[regimeAnalytics.current_regime]?.label ?? regimeAnalytics.current_regime
+                  : 'Awaiting Data'}
+              </h3>
+              <p className="text-sm text-slate-400">
+                Confidence:{' '}
+                {regimeAnalytics ? percentFormatter.format(regimeAnalytics.probability) : PRICE_FALLBACK}
+              </p>
+              <p className="text-sm text-slate-400">
+                ATR: {regimeAnalytics ? formatMetric(regimeAnalytics.atr, true) : PRICE_FALLBACK}
+              </p>
+            </div>
+            <button
+              onClick={fetchRegimeSnapshot}
+              className="flex items-center gap-2 text-slate-400 hover:text-white text-sm"
+            >
+              <RefreshCcw size={14} /> {loadingRegime ? 'Updating...' : 'Refresh'}
+            </button>
+          </div>
+          <div className="h-56">
+            {regimeAnalytics && regimeChartData.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={regimeChartData}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
+                  <XAxis dataKey="time" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                  <YAxis
+                    tickFormatter={(value) => percentFormatter.format(Number(value))}
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    width={60}
+                    domain={[0, 1]}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
+                    labelStyle={{ color: '#94a3b8' }}
+                    formatter={(value: number) => [percentFormatter.format(value), 'Probability']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="probability"
+                    stroke="#a855f7"
+                    fill="#a855f7"
+                    fillOpacity={0.2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500 text-sm border border-dashed border-slate-700 rounded">
+                {loadingRegime ? 'Fetching regime analytics...' : 'No regime data available'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-xs text-slate-400">Order Book State</p>
+              <h3
+                className={`text-2xl font-bold ${
+                  orderBookAnalytics
+                    ? ORDER_STATE_META[orderBookAnalytics.state]?.className ?? 'text-slate-200'
+                    : 'text-slate-500'
+                }`}
+              >
+                {orderBookAnalytics
+                  ? ORDER_STATE_META[orderBookAnalytics.state]?.label ?? orderBookAnalytics.state
+                  : 'Awaiting Data'}
+              </h3>
+              <p className="text-sm text-slate-400">
+                Imbalance:{' '}
+                {orderBookAnalytics
+                  ? percentFormatter.format(orderBookAnalytics.imbalance)
+                  : PRICE_FALLBACK}
+              </p>
+              <p className="text-sm text-slate-400">
+                Spread:{' '}
+                {orderBookAnalytics ? formatMetric(orderBookAnalytics.spread, true) : PRICE_FALLBACK}
+              </p>
+            </div>
+            <button
+              onClick={fetchOrderBookSnapshot}
+              className="flex items-center gap-2 text-slate-400 hover:text-white text-sm"
+            >
+              <RefreshCcw size={14} /> {loadingOrderBook ? 'Updating...' : 'Refresh'}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+            <div>
+              <p className="text-xs text-slate-400">Best Bid</p>
+              <p className="text-lg font-semibold">
+                {orderBookAnalytics ? formatMetric(orderBookAnalytics.best_bid, true) : PRICE_FALLBACK}
+              </p>
+              <p className="text-xs text-slate-500">
+                Buy Vol: {orderBookAnalytics ? formatQuantity(orderBookAnalytics.buy_pressure) : PRICE_FALLBACK}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400">Best Ask</p>
+              <p className="text-lg font-semibold">
+                {orderBookAnalytics ? formatMetric(orderBookAnalytics.best_ask, true) : PRICE_FALLBACK}
+              </p>
+              <p className="text-xs text-slate-500">
+                Sell Vol: {orderBookAnalytics ? formatQuantity(orderBookAnalytics.sell_pressure) : PRICE_FALLBACK}
+              </p>
+            </div>
+          </div>
+          <div className="h-40 mb-4">
+            {orderBookHistory.length ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={orderBookHistory}>
+                  <CartesianGrid strokeDasharray="4 4" stroke="#1e293b" />
+                  <XAxis dataKey="time" tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                  <YAxis
+                    tickFormatter={(value) => percentFormatter.format(Number(value))}
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    width={60}
+                    domain={[-1, 1]}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
+                    labelStyle={{ color: '#94a3b8' }}
+                    formatter={(value: number) => [percentFormatter.format(value), 'Imbalance']}
+                  />
+                  <Line type="monotone" dataKey="imbalance" stroke="#34d399" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-slate-500 text-sm border border-dashed border-slate-700 rounded">
+                {loadingOrderBook ? 'Fetching order book data...' : 'No order book data available'}
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div>
+              <p className="text-slate-400 mb-1">Bids</p>
+              <div className="space-y-1 border border-slate-700 rounded p-2 h-32 overflow-y-auto">
+                {orderBookAnalytics?.bids && orderBookAnalytics.bids.length ? (
+                  orderBookAnalytics.bids.slice(0, 6).map((level, idx) => (
+                    <div key={`bid-${idx}`} className="flex justify-between text-green-300">
+                      <span>{formatMetric(level.price, true)}</span>
+                      <span>{formatQuantity(level.size)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-slate-500">No bids</p>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-slate-400 mb-1">Asks</p>
+              <div className="space-y-1 border border-slate-700 rounded p-2 h-32 overflow-y-auto">
+                {orderBookAnalytics?.asks && orderBookAnalytics.asks.length ? (
+                  orderBookAnalytics.asks.slice(0, 6).map((level, idx) => (
+                    <div key={`ask-${idx}`} className="flex justify-between text-red-300">
+                      <span>{formatMetric(level.price, true)}</span>
+                      <span>{formatQuantity(level.size)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-slate-500">No asks</p>
+                )}
+              </div>
             </div>
           </div>
         </div>

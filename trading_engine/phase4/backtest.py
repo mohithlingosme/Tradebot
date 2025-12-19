@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import create_engine, text
+
 from .engine import TradingEngine
 from .metrics import PerformanceMetrics, calculate_performance
 from .models import Bar, OrderFill, PortfolioState
@@ -37,7 +39,11 @@ class BacktestReport:
 
 
 class HistoricalDataLoader:
-    """Loads historical OHLCV either from CSV files or preloaded data structures."""
+    """Loads historical OHLCV either from Timescale/Postgres or CSV files."""
+
+    def __init__(self, database_url: str | None = None) -> None:
+        self.database_url = database_url
+        self._engine = create_engine(database_url) if database_url else None
 
     def load_history(
         self,
@@ -48,6 +54,39 @@ class HistoricalDataLoader:
         source_path: Optional[str] = None,
     ) -> Dict[str, List[Bar]]:
         bars: Dict[str, List[Bar]] = {s: [] for s in symbols}
+        if self._engine:
+            query = text(
+                """
+                SELECT symbol, ts_utc, open, high, low, close, volume
+                FROM candles
+                WHERE symbol = :symbol
+                AND ts_utc BETWEEN :start AND :end
+                ORDER BY ts_utc ASC
+                """
+            )
+            with self._engine.connect() as conn:
+                for symbol in symbols:
+                    result = conn.execute(query, {"symbol": symbol, "start": start, "end": end})
+                    for row in result:
+                        record = row._mapping if hasattr(row, "_mapping") else row
+                        ts = record["ts_utc"]
+                        if hasattr(ts, "to_pydatetime"):
+                            ts_value = ts.to_pydatetime()
+                        else:
+                            ts_value = ts
+                        bars[symbol].append(
+                            Bar(
+                                symbol=symbol,
+                                timestamp=ts_value,
+                                open=float(record["open"]),
+                                high=float(record["high"]),
+                                low=float(record["low"]),
+                                close=float(record["close"]),
+                                volume=float(record["volume"] or 0.0),
+                            )
+                        )
+            return bars
+
         if source_path:
             for symbol in symbols:
                 file_path = Path(source_path) / f"{symbol}_{timeframe}.csv"

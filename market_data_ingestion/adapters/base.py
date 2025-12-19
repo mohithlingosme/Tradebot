@@ -8,6 +8,15 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 
 @dataclass
+class OrderBookLevel:
+    price: float
+    size: float
+
+    def to_dict(self) -> Dict[str, float]:
+        return {"price": self.price, "size": self.size}
+
+
+@dataclass
 class NormalizedTick:
     """Canonical tick structure used across providers."""
 
@@ -17,10 +26,16 @@ class NormalizedTick:
     volume: float
     provider: str
     raw: Dict[str, Any]
+    bids: Optional[List[OrderBookLevel]] = None
+    asks: Optional[List[OrderBookLevel]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data["ts_utc"] = self.ts_utc.isoformat()
+        if self.bids is not None:
+            data["bids"] = [level.to_dict() for level in self.bids]
+        if self.asks is not None:
+            data["asks"] = [level.to_dict() for level in self.asks]
         return data
 
 

@@ -1,0 +1,51 @@
+{
+  "id": null,
+  "title": "Finbot Order Flow",
+  "timezone": "browser",
+  "version": 1,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Top Level Liquidity Delta",
+      "datasource": {
+        "type": "postgres",
+        "uid": "finbot-timescale"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "lineWidth": 2
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "format": "time_series",
+          "group": [],
+          "metricColumn": "none",
+          "rawSql": "SELECT ts_utc AS \"time\", (COALESCE((bids->0->>'size')::numeric, 0) - COALESCE((asks->0->>'size')::numeric, 0)) AS top_level_delta\nFROM order_book_snapshots\nWHERE symbol = 'BTC-USD'\nORDER BY ts_utc DESC\nLIMIT 500;",
+          "refId": "A",
+          "table": "order_book_snapshots",
+          "timeColumn": "ts_utc",
+          "valueColumn": "top_level_delta"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}
