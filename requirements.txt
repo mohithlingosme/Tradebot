@@ -16,7 +16,7 @@ streamlit
 requests
 pandas
 plotly
-backtrader==1.9.76.123
+backtrader==1.9.78.123
 python-jose[cryptography]
 passlib
 bcrypt==3.2.2
