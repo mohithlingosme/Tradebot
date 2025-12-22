@@ -221,6 +221,8 @@ experiments/
 temp/
 finbot-frontend/
 node_modules/
+dist/
+.vite/
 .DS_Store
 *.bak
 *.swp
@@ -228,6 +230,8 @@ node_modules/
 # Additional unwanted files
 finbot_db.db
 market_data.db
+finbot.db
+finbot_db_news.db
 tmp_import_check.py
 tmp_import_check2.py
 indicator.txt
@@ -236,4 +240,21 @@ indicators_py_files.txt
 prompt.txt
 postman_collection.json
 push_all_branches.sh
-.venv_cli/
+
+# Installer binaries
+*.msi
+*.exe
+
+# Windows artifacts
+*.lnk
+
+# Virtual environments
+.venv_cli/
+.vvenv/
+
+# Databases and logs
+*.sqlite
+*.log
+
+# Secrets
+secrets/

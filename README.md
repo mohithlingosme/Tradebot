@@ -83,7 +83,7 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
 
     **For bash/zsh:**
     ```bash
-    DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python create_user.py
+    DATABASE_URL="$DATABASE_URL" python create_user.py
     ```
 
 4.  **Seed the Database (Optional):**
@@ -96,7 +96,7 @@ This method uses Docker and Docker Compose to run the backend and a PostgreSQL d
 
     **For bash/zsh:**
     ```bash
-    DATABASE_URL="postgresql://finbot:finbot123@localhost:5432/market_data" python seed.py
+    DATABASE_URL="$DATABASE_URL" python seed.py
     ```
 
 ---
@@ -132,7 +132,13 @@ This method is simpler and does not require Docker. It uses a local Python envir
         pip install -r requirements.txt
         ```
 
-4.  **Create a User and Database:**
+4.  **Run Database Migrations:**
+    -   Initialize and run database migrations using Alembic.
+        ```bash
+        alembic upgrade head
+        ```
+
+5.  **Create a User and Database:**
     -   Run the following script to create a `finbot.db` SQLite database file and add a new user to it.
         ```bash
         python create_user.py --email admin@finbot.com --password @Dcmk2664
@@ -150,6 +156,42 @@ This method is simpler and does not require Docker. It uses a local Python envir
         uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
         ```
     -   The backend API will be available at `http://localhost:8000`.
+
+#### Authenticate & Test Login
+
+Before logging in from the frontend, make sure at least one user exists in the database:
+
+```bash
+python create_user.py --email admin@example.com --password adminpass
+```
+
+Then authenticate via curl (the API expects JSON with a `username` field; you can pass either an email or legacy username in that field):
+
+```bash
+curl -i -X POST http://127.0.0.1:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin@example.com","password":"adminpass"}'
+```
+
+The response returns a JWT access token:
+
+```json
+{
+  "access_token": "<TOKEN>",
+  "token_type": "bearer"
+}
+```
+
+You can use this token to call protected endpoints (for example `/auth/me`) by passing `Authorization: Bearer <TOKEN>`.
+
+> **Note:** Requests must send JSON with `username` (pass either the email or legacy username) and `password`. Posting form data or omitting one of the fields will result in a `422 Unprocessable Entity` validation error from FastAPI.
+> The backend maps the `username` field to the login identifier, so passing an email string to `username` is the supported way for both login styles.
+
+Or run the automated regression test to verify the contract end-to-end:
+
+```bash
+pytest tests/backend/test_auth_login_contract.py
+```
 
 ### Frontend Setup (Vite + React)
 
@@ -172,6 +214,95 @@ Follow these steps to run the frontend application.
         npm run dev
         ```
     -   The frontend application will be available at `http://localhost:5173` (Vite's default port).
+
+### Live Data Engine Utilities
+
+The `data_engine` package provides reusable building blocks for ingesting ticks, persisting them, and producing OHLCV bars.
+
+```python
+from datetime import datetime
+
+from data_engine import CSVLogger, LiveDataEngine
+
+logger = CSVLogger()  # writes to data/raw/{symbol}_{date}.csv
+engine = LiveDataEngine(timeframe_s=60, window_size=500, logger=logger)
+
+tick_ts = datetime.utcnow()
+current, completed = engine.on_tick("BTCUSD", tick_ts, price=42000.0, volume=0.5)
+if completed:
+    print("Closed candle:", completed.to_dict())
+```
+
+- CSV files are created under `data/raw/` with the schema `timestamp,symbol,price,volume`.
+- `LiveDataEngine.on_tick` can be plugged into `market_data.DataFeed` which now accepts a `LiveDataEngine` instance. Completed candles are pushed into rolling windows for indicator calculations.
+- Additional helpers (VWAP, ATR, rolling windows) live in `data_engine/`, and tests are under `tests/data_engine/`.
+
+### Strategy Engine & Backtesting
+
+Signals and strategies now live under the `brain/` package. `brain.signals.Signal` standardizes outputs (action, price, order_type, meta) and `brain.strategies.VWAPMicrotrendStrategy` implements the “Brain” logic with VWAP/trend detection and market-session filters.
+
+### Risk Shield (Intraday Guardrails)
+
+The backend exposes a hardened risk layer (`risk/risk_manager.py`) that halts trading when daily loss, position, price, margin, or session filters fail. Configure it through the `.env` file:
+
+```ini
+MAX_DAILY_LOSS_INR=1000
+MAX_POSITION_DEFAULT=5
+TRADE_CUTOFF_TIME=15:15
+STRICT_CIRCUIT_CHECK=true  # reject if circuit limits missing
+```
+
+The FastAPI route `GET /risk/status` surfaces the current kill-switch state (halted flag, margin, cutoff time) for dashboards. To run a manual check:
+
+```python
+from datetime import datetime
+from risk.risk_manager import OrderRequest, RiskContext, RiskEngine
+
+risk_engine = RiskEngine(max_daily_loss=1000, max_pos_default=5)
+ctx = RiskContext(
+    available_margin=150000.0,
+    day_pnl=-200.0,
+    positions={"INFY": 0.0},
+    last_price={"INFY": 1520.0},
+    circuit_limits={"INFY": (1400.0, 1600.0)},
+    max_daily_loss=1000.0,
+)
+decision = risk_engine.evaluate(
+    OrderRequest(ts=datetime.utcnow(), symbol="INFY", side="BUY", qty=1, price=1520.0),
+    ctx,
+)
+if not decision.approved:
+    raise RuntimeError(decision.message)
+```
+
+When `STRICT_CIRCUIT_CHECK` is set to true (default), missing circuit bands automatically block new orders with `MISSING_RISK_INPUT`. Provide exchange circuit limits per symbol in `portfolio_state["circuit_limits"]` or disable the flag in development.
+
+- Instantiate a strategy in a live loop:
+    ```python
+    from brain.strategies import VWAPMicrotrendConfig, VWAPMicrotrendStrategy
+
+    config = VWAPMicrotrendConfig(symbol="INFY", timeframe_s=60)
+    strategy = VWAPMicrotrendStrategy(data_feed=None, symbol="INFY", config=config)
+
+    # for each completed candle produced by LiveDataEngine
+    signals = strategy.on_candle(candle)
+    for sig in signals:
+        broker.submit(sig.to_dict())
+    ```
+- Run the lightweight backtester on CSV data (ticks logged under `data/raw/`):
+    ```bash
+    python backtest/run_backtest.py \
+      --symbol INFY \
+      --csv data/raw/INFY_2024-01-10.csv \
+      --strategy vwap_microtrend \
+      --timeframe 60 \
+      --cash 200000
+    ```
+  A JSON report is saved under `reports/`.
+- Unit tests for the strategy framework, indicators, and data engine live under `tests/brain/` and `tests/data_engine/`. Run them with:
+    ```bash
+    pytest tests/brain tests/data_engine
+    ```
 
 
 ## Documentation

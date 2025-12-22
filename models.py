@@ -1,57 +1,73 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, JSON, UniqueConstraint
-from sqlalchemy.orm import declarative_base, relationship
+from typing import Optional, List
+
+from sqlmodel import SQLModel, Field, Relationship
+
 from datetime import datetime
 
-Base = declarative_base()
+# For Alembic
+Base = SQLModel
 
-class User(Base):
+class User(SQLModel, table=True):
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    trades = relationship("Trade", back_populates="owner")
+    id: Optional[int] = Field(default=None, primary_key=True)
+    email: str = Field(unique=True, index=True)
+    hashed_password: str
+    is_active: bool = Field(default=True)
 
-class Trade(Base):
+    # Relationships
+    orders: List["Order"] = Relationship(back_populates="user")
+    positions: List["Position"] = Relationship(back_populates="user")
+
+class Order(SQLModel, table=True):
+    __tablename__ = "orders"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id")
+    symbol: str
+    side: str  # BUY or SELL
+    qty: float
+    price: float
+    status: str = Field(default="PENDING")  # PENDING, OPEN, FILLED, CANCELLED
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Relationships
+    user: User = Relationship(back_populates="orders")
+
+class Position(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id")
+    symbol: str
+    qty: float
+    avg_price: float
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Relationships
+    user: User = Relationship(back_populates="positions")
+
+class Trade(SQLModel, table=True):
     __tablename__ = "trades"
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    symbol = Column(String, index=True)
-    side = Column(String)
-    quantity = Column(Float)
-    price = Column(Float)
-    status = Column(String, default="filled")
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    owner = relationship("User", back_populates="trades")
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="users.id")
+    symbol: str
+    side: str  # BUY or SELL
+    qty: float
+    price: float
+    status: str = Field(default="PENDING")  # PENDING, OPEN, FILLED, CANCELLED
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
+class MarketCandle(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    symbol: str
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
 
-class MarketCandle(Base):
-    __tablename__ = "candles"
-    __table_args__ = (
-        UniqueConstraint("symbol", "ts_utc", "provider", name="uq_candles_symbol_time_provider"),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String(40), index=True, nullable=False)
-    ts_utc = Column(DateTime(timezone=True), index=True, nullable=False)
-    open = Column(Float, nullable=False)
-    high = Column(Float, nullable=False)
-    low = Column(Float, nullable=False)
-    close = Column(Float, nullable=False)
-    volume = Column(Float, default=0.0)
-    provider = Column(String(50), nullable=False)
-
-
-class OrderBookSnapshot(Base):
-    __tablename__ = "order_book_snapshots"
-
-    id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String(40), index=True, nullable=False)
-    ts_utc = Column(DateTime(timezone=True), index=True, nullable=False)
-    best_bid = Column(Float)
-    best_ask = Column(Float)
-    bids = Column(JSON, nullable=False)
-    asks = Column(JSON, nullable=False)
-    provider = Column(String(50), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+class OrderBookSnapshot(SQLModel, table=True):
+    __tablename__ = "orderbooksnapshots"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    symbol: str
+    timestamp: datetime
+    bids: str  # JSON string
+    asks: str  # JSON string

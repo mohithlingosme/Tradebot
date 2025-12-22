@@ -131,12 +131,19 @@ async def readiness_check():
 auth_router = APIRouter()
 
 class UserCredentials(BaseModel):
-    username: str
+    email: str | None = None
+    username: str | None = None
     password: str
+
+    def identifier(self) -> str:
+        return (self.email or self.username or "").strip()
 
 @auth_router.post("/login", response_model=TokenResponse)
 async def api_login(credentials: UserCredentials, session: AsyncSession = Depends(storage.get_async_session)):
-    user = await authenticate_user(session, credentials.username, credentials.password)
+    identifier = credentials.identifier()
+    if not identifier:
+        raise HTTPException(status_code=400, detail="Email is required")
+    user = await authenticate_user(session, identifier, credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     access_token = create_access_token(data={"sub": user.email})

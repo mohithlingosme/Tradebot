@@ -1,13 +1,16 @@
 import argparse
 import asyncio
 import os
+from pathlib import Path
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.future import select
 from models import User, Base
 from backend.api.auth import pwd_context
 
-DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///./finbot.db"
+REPO_ROOT = Path(__file__).resolve().parent
+DEFAULT_SQLITE_DB = REPO_ROOT / "finbot.db"
+DEFAULT_DATABASE_URL = f"sqlite+aiosqlite:///{DEFAULT_SQLITE_DB.as_posix()}"
 
 
 async def create_user(email: str, password: str, database_url: str) -> None:

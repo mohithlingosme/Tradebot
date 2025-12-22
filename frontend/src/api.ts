@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8001'
+const API_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000'
 
 type TradePayload = {
   symbol: string
@@ -80,8 +80,32 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-export const login = async (username: string, password: string) => {
-  const res = await api.post('/auth/login', { username, password })
+type LoginPayload = {
+  username: string
+  password: string
+}
+
+export const login = async (identifier: string, password: string) => {
+  const normalized = identifier.trim()
+  if (!normalized) {
+    throw new Error('Email or username is required')
+  }
+
+  const payload: LoginPayload = {
+    // Backend expects the identifier under the `username` key even if it is an email.
+    username: normalized,
+    password,
+  }
+
+  const res = await api.post(
+    '/auth/login',
+    payload,
+    {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  )
   return res.data
 }
 
@@ -95,5 +119,40 @@ export const getRegimeAnalytics = async (symbol: string): Promise<RegimeAnalytic
   (await api.get(`/analytics/regime/${symbol}`)).data
 export const getOrderBookAnalytics = async (symbol: string): Promise<OrderBookAnalytics> =>
   (await api.get(`/analytics/order-book/${symbol}`)).data
+
+export type Order = {
+  id: string
+  symbol: string
+  side: 'buy' | 'sell'
+  qty: number
+  price?: number
+  status: 'pending' | 'filled' | 'cancelled'
+  created_at: string
+  filled_at?: string
+}
+
+export type PnLData = {
+  day_pnl: number
+  total_pnl: number
+  unrealized_pnl: number
+  realized_pnl: number
+}
+
+export type LogEntry = {
+  timestamp: string
+  level: 'INFO' | 'WARNING' | 'ERROR'
+  message: string
+  source: string
+}
+
+export const getOrders = async (): Promise<Order[]> => (await api.get('/portfolio/orders')).data
+export const getPnL = async (): Promise<PnLData> => (await api.get('/portfolio/pnl')).data
+export const getTrades = async (): Promise<any[]> => (await api.get('/portfolio/trades')).data
+export const getLogs = async (): Promise<LogEntry[]> => (await api.get('/logs')).data
+
+export const cancelOrder = async (orderId: number) => (await api.post('/trade/cancel_order', { order_id: orderId })).data
+export const modifyOrder = async (orderId: number, qty?: number, price?: number) => (await api.post('/trade/modify_order', { order_id: orderId, qty, price })).data
+export const startEngine = async () => (await api.post('/engine/start')).data
+export const stopEngine = async () => (await api.post('/engine/stop')).data
 
 export default api

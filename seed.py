@@ -28,10 +28,6 @@ async def seed_data():
     """Seeds the database with default users."""
     print("Seeding database...")
 
-    # Create tables
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
     async with async_session() as session:
         # Create admin user
         admin_email = "admin@example.com"
@@ -54,9 +50,9 @@ async def seed_data():
             print("Admin user already exists.")
 
         # Create specific user
-        username = "mohith"
-        email = "mohithlingosme0218@gmail.com"
-        password = "@Dcmk2664"
+        username = os.environ.get("USER_USERNAME", "mohith")
+        email = os.environ.get("USER_EMAIL", "mohithlingosme0218@gmail.com")
+        password = os.environ.get("USER_PASSWORD", "@Dcmk2664")
 
         existing_user = await session.execute(
             select(User).filter(User.email == email)

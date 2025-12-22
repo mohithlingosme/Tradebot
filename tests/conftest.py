@@ -26,8 +26,10 @@ for module_name in mock_modules:
 
 def pytest_configure(config):
     """Configure pytest with early mocking to prevent import errors during collection."""
-    # Additional mocking if needed during pytest configuration
-    pass
+    config.addinivalue_line(
+        "markers",
+        "real_auth: run tests against the real FastAPI auth stack (no mocked modules)",
+    )
 
 import asyncio
 import inspect
@@ -82,8 +84,13 @@ def ensure_fixturedef_unittest_attribute():
 
 
 @pytest.fixture(autouse=True)
-def mock_missing_modules():
+def mock_missing_modules(request):
     """Mock missing modules to prevent import errors during tests."""
+    if request.node.get_closest_marker("real_auth"):
+        # Allow tests marked with `real_auth` to import the real backend modules.
+        yield
+        return
+
     import sys
     from unittest.mock import MagicMock, patch
 

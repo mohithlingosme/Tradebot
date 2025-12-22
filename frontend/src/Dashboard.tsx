@@ -17,6 +17,9 @@ import type {
   PositionSnapshot,
   RegimeAnalytics,
   OrderBookAnalytics,
+  Order,
+  PnLData,
+  LogEntry,
 } from './api'
 import {
   getIndicators,
@@ -25,6 +28,9 @@ import {
   getRegimeAnalytics,
   getOrderBookAnalytics,
   placeTrade,
+  getOrders,
+  getPnL,
+  getLogs,
 } from './api'
 
 type Portfolio = {
@@ -165,6 +171,9 @@ export default function Dashboard() {
   const [orderBookAnalytics, setOrderBookAnalytics] = useState<OrderBookAnalytics | null>(null)
   const [loadingRegime, setLoadingRegime] = useState(false)
   const [loadingOrderBook, setLoadingOrderBook] = useState(false)
+  const [orders, setOrders] = useState<Order[]>([])
+  const [pnl, setPnL] = useState<PnLData | null>(null)
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -250,9 +259,39 @@ export default function Dashboard() {
     }
   }, [])
 
+  const fetchOrders = useCallback(async () => {
+    try {
+      const ordersData = await getOrders()
+      setOrders(ordersData)
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
+  const fetchPnL = useCallback(async () => {
+    try {
+      const pnlData = await getPnL()
+      setPnL(pnlData)
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const logsData = await getLogs()
+      setLogs(logsData.slice(-50)) // Last 50 logs
+    } catch (err) {
+      console.error(err)
+    }
+  }, [])
+
   useEffect(() => {
     fetchPositions()
-  }, [fetchPositions])
+    fetchOrders()
+    fetchPnL()
+    fetchLogs()
+  }, [fetchPositions, fetchOrders, fetchPnL, fetchLogs])
 
   const chartRows: ChartRow[] = useMemo(() => {
     if (!indicatorData) return []
@@ -401,7 +440,7 @@ export default function Dashboard() {
         </button>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         {[
           { label: 'Cash Balance', val: portfolio.cash, color: 'text-green-400' },
           { label: 'Portfolio Equity', val: portfolio.equity, color: 'text-blue-400' },
@@ -412,6 +451,15 @@ export default function Dashboard() {
             <p className={`text-2xl font-bold mt-2 ${item.color}`}>{formatMetric(item.val, true)}</p>
           </div>
         ))}
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-lg">
+          <h3 className="text-slate-400 text-sm font-medium">PnL</h3>
+          <div className="mt-2 space-y-1">
+            <p className="text-lg font-bold text-green-400">Day: {formatMetric(pnl?.day_pnl, true)}</p>
+            <p className="text-lg font-bold text-blue-400">Total: {formatMetric(pnl?.total_pnl, true)}</p>
+            <p className="text-sm text-slate-400">Unrealized: {formatMetric(pnl?.unrealized_pnl, true)}</p>
+            <p className="text-sm text-slate-400">Realized: {formatMetric(pnl?.realized_pnl, true)}</p>
+          </div>
+        </div>
       </div>
 
       <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-8">
@@ -608,10 +656,10 @@ export default function Dashboard() {
               <input
                 type="number"
                 value={qty}
-                onChange={(e) => setQty(Number(e.target.value))}
+                onChange={(e) => setQty(parseInt(e.target.value) || 0)}
                 className="w-full bg-slate-700 p-2 rounded text-white border border-slate-600"
-                min={0.01}
-                step={0.01}
+                min={1}
+                step={1}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -852,6 +900,78 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mt-10">
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+          <h2 className="text-xl font-bold mb-4">📋 Orders</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left p-2 text-slate-400">ID</th>
+                  <th className="text-left p-2 text-slate-400">Symbol</th>
+                  <th className="text-left p-2 text-slate-400">Side</th>
+                  <th className="text-left p-2 text-slate-400">Qty</th>
+                  <th className="text-left p-2 text-slate-400">Price</th>
+                  <th className="text-left p-2 text-slate-400">Status</th>
+                  <th className="text-left p-2 text-slate-400">Created</th>
+                  <th className="text-left p-2 text-slate-400">Filled</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.length ? (
+                  orders.map((order) => (
+                    <tr key={order.id} className="border-b border-slate-700">
+                      <td className="p-2">{order.id}</td>
+                      <td className="p-2">{order.symbol}</td>
+                      <td className={`p-2 ${order.side === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                        {order.side.toUpperCase()}
+                      </td>
+                      <td className="p-2">{order.qty}</td>
+                      <td className="p-2">{order.price ? formatMetric(order.price, true) : '--'}</td>
+                      <td className={`p-2 ${order.status === 'filled' ? 'text-green-400' : order.status === 'cancelled' ? 'text-red-400' : 'text-yellow-400'}`}>
+                        {order.status}
+                      </td>
+                      <td className="p-2">{new Date(order.created_at).toLocaleString()}</td>
+                      <td className="p-2">{order.filled_at ? new Date(order.filled_at).toLocaleString() : '--'}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="p-4 text-center text-slate-500">
+                      No orders yet
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+          <h2 className="text-xl font-bold mb-4">📝 Logs</h2>
+          <div className="overflow-y-auto h-96">
+            {logs.length ? (
+              logs.map((log, idx) => (
+                <div key={idx} className="border-b border-slate-700 p-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className={`font-semibold ${log.level === 'ERROR' ? 'text-red-400' : log.level === 'WARNING' ? 'text-yellow-400' : 'text-slate-400'}`}>
+                      {log.level}
+                    </span>
+                    <span className="text-slate-500">{new Date(log.timestamp).toLocaleString()}</span>
+                  </div>
+                  <div className="text-slate-300 mt-1">{log.message}</div>
+                  <div className="text-xs text-slate-500">{log.source}</div>
+                </div>
+              ))
+            ) : (
+              <div className="p-4 text-center text-slate-500">
+                No logs available
+              </div>
+            )}
           </div>
         </div>
       </div>

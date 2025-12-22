@@ -39,8 +39,8 @@ function App() {
     e.preventDefault();
     try {
       const response = await axios.post(`${API_URL}/auth/login`, {
-        username: email,
-        password: password,
+        email,
+        password,
       });
       setUser(response.data);
     } catch (error) {
