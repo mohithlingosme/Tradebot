@@ -38,7 +38,7 @@ jobs:
 
       # Reuse virtualenv wheels for faster installs
       - name: Cache pip downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: security-safety-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
@@ -75,7 +75,7 @@ jobs:
           cache: 'pip'
 
       - name: Cache pip downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: security-bandit-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt') }}

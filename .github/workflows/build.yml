@@ -38,7 +38,7 @@ jobs:
 
       # Cache speeds up repeated installs during frequent pushes
       - name: Cache pip directory
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: build-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt', 'setup.cfg') }}
