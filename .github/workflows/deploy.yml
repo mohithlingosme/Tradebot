@@ -78,7 +78,7 @@ jobs:
             deploy_path: /opt/finbot/live
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Decide which immutable image tag each deployment should pull
       - name: Resolve image tag
