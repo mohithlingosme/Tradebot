@@ -62,7 +62,7 @@ jobs:
 
       # Push results upstream to Codecov for historical trends
       - name: Publish to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: ${{ env.COVERAGE_FILE }}
           token: ${{ secrets.CODECOV_TOKEN }}
