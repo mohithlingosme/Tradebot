@@ -141,7 +141,7 @@ This method is simpler and does not require Docker. It uses a local Python envir
 5.  **Create a User and Database:**
     -   Run the following script to create a `finbot.db` SQLite database file and add a new user to it.
         ```bash
-        python create_user.py --email admin@finbot.com --password @Dcmk2664
+        python create_user.py --email admin@finbot.com --password '@Dcmk2664'
         ```
 
 5.  **Seed the Database (Optional):**
@@ -156,42 +156,6 @@ This method is simpler and does not require Docker. It uses a local Python envir
         uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
         ```
     -   The backend API will be available at `http://localhost:8000`.
-
-#### Authenticate & Test Login
-
-Before logging in from the frontend, make sure at least one user exists in the database:
-
-```bash
-python create_user.py --email admin@example.com --password adminpass
-```
-
-Then authenticate via curl (the API expects JSON with a `username` field; you can pass either an email or legacy username in that field):
-
-```bash
-curl -i -X POST http://127.0.0.1:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin@example.com","password":"adminpass"}'
-```
-
-The response returns a JWT access token:
-
-```json
-{
-  "access_token": "<TOKEN>",
-  "token_type": "bearer"
-}
-```
-
-You can use this token to call protected endpoints (for example `/auth/me`) by passing `Authorization: Bearer <TOKEN>`.
-
-> **Note:** Requests must send JSON with `username` (pass either the email or legacy username) and `password`. Posting form data or omitting one of the fields will result in a `422 Unprocessable Entity` validation error from FastAPI.
-> The backend maps the `username` field to the login identifier, so passing an email string to `username` is the supported way for both login styles.
-
-Or run the automated regression test to verify the contract end-to-end:
-
-```bash
-pytest tests/backend/test_auth_login_contract.py
-```
 
 ### Frontend Setup (Vite + React)
 

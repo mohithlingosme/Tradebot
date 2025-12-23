@@ -1,58 +1,38 @@
-# DoD Implementation Plan
+# Secret Removal Next Steps
 
-## 1. Repo Cleanup
-- [x] Remove tracked junk (node_modules, venvs, *.db, installers, logs)
-- [x] Add proper .gitignore for Python + Node + DB + OS files
+## Completed Tasks
+- [x] Fixed failing GitHub Actions checks until CI is fully green
+  - Fixed frontend lint/type errors (no 'any' violations)
+  - Fixed workflow lint issues (yamllint config added)
+  - Upgraded security scanning tools if deprecated (CodeQL not used, others current)
+  - All workflows now pass on PR
 
-## 2. Secrets Hygiene
-- [x] Move hardcoded secrets from docker-compose.yml to env vars
-- [x] Create .env.example (backend and frontend) with placeholders: DATABASE_URL, REDIS_URL, JWT_SECRET, CORS_ORIGINS, VITE_API_URL
-- [x] Add SECURITY.md with vuln reporting + secret rotation
-- [x] Add basic secret-scan step in CI (grep patterns)
+## Pending Tasks
+- [ ] Set up GitHub Secrets in repository settings for POSTGRES_PASSWORD, SECRET_KEY, GRAFANA_ADMIN_PASSWORD, etc.
+- [ ] Create .env file locally with actual values
+- [ ] Test docker-compose up to ensure services start correctly
+- [ ] Run secret-scan workflow to verify
 
-## 3. One-Command Docker
-- [x] Add Redis to docker-compose.yml
-- [x] Ensure backend waits for DB + runs migrations on startup
-- [x] Add Makefile/scripts: make dev, make down, make logs
-- [x] Update README with clean quickstart steps
+## Instructions for GitHub Secrets Setup
+1. Go to your repository on GitHub
+2. Navigate to Settings > Secrets and variables > Actions
+3. Add the following secrets:
+   - POSTGRES_PASSWORD: [your database password]
+   - SECRET_KEY: [your Flask secret key, generate a secure random string]
+   - GRAFANA_ADMIN_PASSWORD: [your Grafana admin password]
+   - STORED_HASH: [the bcrypt hash for password verification]
 
-## 4. Single Source Structure
-- [x] Consolidate backend/app = FastAPI app
-- [x] Consolidate core/ = trading_engine + risk + execution + brain
-- [x] Move frontend/ to root level
-- [x] Archive/remove duplicates (backtester/, trading_engine/, execution/, etc.)
+## Instructions for Local .env File
+Create a .env file in the root directory with:
+```
+POSTGRES_PASSWORD=your_actual_password
+SECRET_KEY=your_actual_secret_key
+GRAFANA_ADMIN_PASSWORD=your_actual_grafana_password
+STORED_HASH=your_actual_stored_hash
+```
 
-## 5. Backend API Enhancement
-- [x] Add trade/place_order endpoint with risk enforcement
-- [x] Add trade/cancel_order endpoint
-- [x] Add trade/modify_order endpoint
-- [x] Add engine/start endpoint
-- [x] Add engine/stop endpoint
-- [x] Ensure all endpoints have JWT protection, schemas, error handling
-
-## 6. Risk Engine Integration
-- [x] Integrate RiskEngine.evaluate() before order placement
-- [x] Add risk audit logging
-- [x] Add unit tests for risk rules
-
-## 7. UI Requirements
-- [x] Add orders table (open + history)
-- [x] Add PnL widget (day + overall)
-- [x] Add logs view (recent engine events)
-- [x] Fix quantity decimal bug (integer only, step=1)
-- [x] Add polling/websocket for live updates
-
-## 8. Testing + CI
-- [x] Backend tests: pytest for auth, place_order, positions reflect fills, risk rejects
-- [x] Frontend CI: npm ci + npm run build
-- [x] GitHub Actions: backend lint + pytest, frontend build, secret scan
-- [x] Ensure CI passes on push
-
-## Acceptance Checks
-- [x] Fresh clone → docker compose up --build works
-- [x] Backend health: curl GET /health returns OK
-- [x] Auth: POST /auth/login works
-- [x] Trading flow: place_order → fills → positions update
-- [x] UI flow: login → dashboard updates after trade
-- [x] Risk: demonstrate rejection + audit log
-- [x] CI: GitHub Actions green
+## Testing Steps
+1. Run `docker-compose up` to start services
+2. Verify all services start without errors
+3. Push changes to trigger secret-scan workflow
+4. Confirm workflow passes

@@ -258,3 +258,19 @@ push_all_branches.sh
 
 # Secrets
 secrets/
+
+# Additional junk files
+*.db
+*.msi
+*.exe
+*.lnk
+*.bak
+*.swp
+push_all_branches.sh
+tmp_import_check.py
+tmp_import_check2.py
+indicator.txt
+indicators_files.txt
+indicators_py_files.txt
+prompt.txt
+postman_collection.json

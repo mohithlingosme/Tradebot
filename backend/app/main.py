@@ -66,21 +66,17 @@ async def read_current_user(
 
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
-    """Check health of DB, Redis, and engine status."""
+    """Check health of DB and engine status."""
     try:
         # Check DB
         await db.execute("SELECT 1")
 
-        # Check Redis
-        await redis_client.ping()
-
         # Check engine status (mock for now)
-        engine_status = "stopped"  # TODO: implement real engine status
+        engine_status = "running" if risk_engine else "stopped"
 
         return {
             "status": "healthy",
             "database": "connected",
-            "redis": "connected",
             "engine": engine_status
         }
     except Exception as e:

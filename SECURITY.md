@@ -40,6 +40,22 @@ We will acknowledge receipt within 48 hours and provide a more detailed response
 - Monitor for unusual usage patterns
 - Use environment variables for all API keys
 
+### Finbot-Specific Secrets
+- **POSTGRES_PASSWORD**: Rotate database password quarterly. Update in GitHub Secrets and .env file.
+- **SECRET_KEY**: Rotate Flask secret key every 90 days. Generate new 256-bit random string.
+- **GRAFANA_ADMIN_PASSWORD**: Rotate Grafana admin password quarterly.
+- **DOCKER_USERNAME/PASSWORD**: Rotate Docker registry credentials annually or if compromised.
+- **SSH Keys**: Rotate SSH private keys used for deployment annually.
+- **API Keys for Environments**: Rotate DEV_API_KEY, PAPER_API_KEY, LIVE_API_KEY quarterly.
+
+To rotate secrets:
+1. Generate new secure values
+2. Update GitHub Secrets in repository settings
+3. Update .env file locally (if applicable)
+4. Redeploy services
+5. Verify functionality
+6. Remove old secrets from any backups or logs
+
 ## Security Best Practices
 
 - Never commit secrets to version control

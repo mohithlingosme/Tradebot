@@ -3,10 +3,12 @@ version: "3.9"
 services:
   timescale:
     image: timescale/timescaledb-ha:pg16.2
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: finbot
       POSTGRES_USER: finbot
-      POSTGRES_PASSWORD: finbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -22,10 +24,12 @@ services:
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://finbot:finbot@timescale:5432/finbot
+      DATABASE_URL: postgresql+asyncpg://finbot:${POSTGRES_PASSWORD}@timescale:5432/finbot
       FRONTEND_ORIGINS: http://localhost:4173,http://frontend:80
-      SECRET_KEY: super-secret-key
+      SECRET_KEY: ${SECRET_KEY}
     depends_on:
       timescale:
         condition: service_healthy
@@ -45,9 +49,11 @@ services:
 
   grafana:
     image: grafana/grafana:11.1.0
+    env_file:
+      - .env
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
     ports:
       - "3000:3000"
     volumes:
