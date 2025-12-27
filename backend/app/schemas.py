@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import List
 
 from pydantic import BaseModel, Field, model_validator
@@ -131,3 +132,19 @@ class LogEntry(BaseModel):
     level: str
     message: str
     source: str
+
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    username: Optional[str] = None
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
