@@ -9,47 +9,63 @@ on:
 jobs:
   full-test-suite:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       matrix:
-        python-version: ["3.11.9"]
-
+        python-version: ['3.11']
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_PYTHON_VERSION_WARNING: '1'
+      SQLALCHEMY_SILENCE_UBER_WARNING: '1'
+      DATABASE_URL: sqlite:////tmp/finbot-ci.db
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
 
-    - name: Cache pip dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          if [ -f requirements-dev.txt ]; then
+            python -m pip install -r requirements-dev.txt
+          fi
+          python -m pip install pytest pytest-cov coverage
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
-        pip install -e finbot-backend/
+      - name: Run full test suite
+        env:
+          PYTEST_ADDOPTS: -vv --maxfail=1
+        run: |
+          python -m pytest tests/ \
+            --cov=backend \
+            --cov=core \
+            --cov=data_collector \
+            --cov=market_data_ingestion \
+            --cov-report=xml \
+            --cov-report=html \
+            2>&1 | tee pytest_output.txt
 
-    - name: Run full test suite
-      run: |
-        python -m pytest tests/ -v --cov=finbot --cov-report=xml --cov-report=html
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-coverage-report
+          path: htmlcov/
+          if-no-files-found: warn
 
-    - name: Upload coverage reports
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: nightly-coverage-report
-        path: htmlcov/
-
-    - name: Upload test results
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: nightly-test-results
-        path: pytest_output.txt
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-test-results
+          path: pytest_output.txt
+          if-no-files-found: warn

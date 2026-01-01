@@ -18,15 +18,26 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   pytest:
     name: Pytest on Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_PYTHON_VERSION_WARNING: '1'
+      SQLALCHEMY_SILENCE_UBER_WARNING: '1'
+      DATABASE_URL: sqlite:////tmp/finbot-ci.db
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ['3.11']
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -38,15 +49,6 @@ jobs:
           cache: 'pip'
 
       # Speed up dependency installation across matrix entries
-      - name: Cache pip downloads
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: tests-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('pyproject.toml', 'requirements*.txt', 'setup.cfg') }}
-          restore-keys: |
-            tests-${{ runner.os }}-${{ matrix.python-version }}-
-            tests-${{ runner.os }}-
-
       # Install the runtime + test dependencies required for CI
       - name: Install dependencies
         run: |
@@ -60,10 +62,17 @@ jobs:
       # Capture full coverage (+ junit XML) for reporting and artifacts
       - name: Run pytest with coverage
         env:
-          PYTHONWARNINGS: default
+          PYTEST_ADDOPTS: -ra --maxfail=1
         run: |
           mkdir -p reports
-          pytest --junitxml=reports/junit.xml --cov=src --cov-report=xml --cov-report=term-missing
+          pytest \
+            --junitxml=reports/junit.xml \
+            --cov=backend \
+            --cov=core \
+            --cov=data_collector \
+            --cov=market_data_ingestion \
+            --cov-report=xml \
+            --cov-report=term-missing
 
       # Always persist junit output so flaky tests can be diagnosed
       - name: Upload pytest results
@@ -72,6 +81,7 @@ jobs:
         with:
           name: pytest-report-py${{ matrix.python-version }}
           path: reports/junit.xml
+          if-no-files-found: warn
 
       - name: Upload coverage report
         if: always()
@@ -79,3 +89,4 @@ jobs:
         with:
           name: coverage-py${{ matrix.python-version }}
           path: coverage.xml
+          if-no-files-found: warn

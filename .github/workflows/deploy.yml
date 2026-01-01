@@ -31,6 +31,7 @@ on:
 permissions:
   contents: read
   packages: read
+  deployments: write
 
 jobs:
   deploy:
@@ -44,8 +45,10 @@ jobs:
       group: finbot-deploy-${{ matrix.name }}
       cancel-in-progress: false
     if: |
-      (github.event_name == 'push' && github.ref == format('refs/heads/{0}', matrix.branch)) ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == matrix.name)
+      github.event.repository.fork == false && (
+        (github.event_name == 'push' && github.ref == format('refs/heads/{0}', matrix.branch)) ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == matrix.name)
+      )
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}
     strategy:

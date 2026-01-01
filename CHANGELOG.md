@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security hardening and DevSecOps practices
 
 ### Changed
-- N/A
+- Hardened CI/CD workflows (actionlint + CodeQL coverage, reliable caching, fenced deployments, refreshed scripts/docs).
 
 ### Deprecated
 - N/A
@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - N/A
 
 ### Fixed
-- N/A
+- Backend authentication endpoints now tolerate SQLite-driven CI runs (auto-migrated schemas and resilient login instrumentation), unblocking pytest workflows.
 
 ### Security
 - N/A

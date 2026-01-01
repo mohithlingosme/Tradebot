@@ -21,6 +21,12 @@ jobs:
     timeout-minutes: 30
     env:
       COVERAGE_FILE: coverage.xml
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_PYTHON_VERSION_WARNING: '1'
+      SQLALCHEMY_SILENCE_UBER_WARNING: '1'
+      DATABASE_URL: sqlite:////tmp/finbot-ci.db
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,15 +36,6 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-
-      # Warm pip's download cache for faster repeat runs
-      - name: Cache pip downloads
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: coverage-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt') }}
-          restore-keys: |
-            coverage-${{ runner.os }}-
 
       # Install python deps plus pytest-cov + coverage client
       - name: Install test dependencies
@@ -51,8 +48,16 @@ jobs:
           python -m pip install pytest pytest-cov coverage
 
       - name: Run coverage suite
+        env:
+          PYTEST_ADDOPTS: -ra --maxfail=1
         run: |
-          pytest --cov=src --cov-report=xml:$COVERAGE_FILE --cov-report=term-missing
+          pytest \
+            --cov=backend \
+            --cov=core \
+            --cov=data_collector \
+            --cov=market_data_ingestion \
+            --cov-report=xml:$COVERAGE_FILE \
+            --cov-report=term-missing
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -62,6 +67,7 @@ jobs:
 
       # Push results upstream to Codecov for historical trends
       - name: Publish to Codecov
+        if: ${{ secrets.CODECOV_TOKEN != '' }}
         uses: codecov/codecov-action@v4
         with:
           files: ${{ env.COVERAGE_FILE }}

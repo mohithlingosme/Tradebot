@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, AliasChoices
 
 
 class LoginRequest(BaseModel):
@@ -12,17 +12,22 @@ class LoginRequest(BaseModel):
         default=None,
         description="Legacy alias for email (UI historically labeled this as username).",
     )
+    raw_identifier: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("raw_identifier", "identifier"),
+        description="Backwards compatible identifier payload field.",
+    )
     password: str
 
     @model_validator(mode="after")
     def _ensure_identifier(cls, values: "LoginRequest") -> "LoginRequest":
-        if not (values.email or values.username):
+        if not (values.email or values.username or values.raw_identifier):
             raise ValueError("Either email or username must be provided.")
         return values
 
     def identifier(self) -> str:
         """Return the normalized login identifier (email-compatible)."""
-        value = self.email or self.username or ""
+        value = self.email or self.username or self.raw_identifier or ""
         return value.strip()
 
 

@@ -10,15 +10,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
       - name: Generate project report
-        run: python scripts/project_report.py --output reports/project-status.md
+        run: python infrastructure/scripts/project_report.py --output reports/project-status.md
       - name: Upload report artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: project-status-report
           path: reports/project-status.md

@@ -23,6 +23,13 @@ jobs:
     name: Static analysis and formatting
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PIP_NO_PYTHON_VERSION_WARNING: '1'
+      SQLALCHEMY_SILENCE_UBER_WARNING: '1'
+      DATABASE_URL: sqlite:////tmp/finbot-ci.db
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,17 +37,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
           cache: 'pip'
-
-      # Prime the pip cache to avoid reinstalling common wheels
-      - name: Cache pip directory
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: lint-${{ runner.os }}-${{ hashFiles('pyproject.toml', 'requirements*.txt', 'setup.cfg') }}
-          restore-keys: |
-            lint-${{ runner.os }}-
+          cache-dependency-path: |
+            requirements.txt
+            pyproject.toml
 
       # Install the lint tooling stack declared above
       - name: Install lint tooling
