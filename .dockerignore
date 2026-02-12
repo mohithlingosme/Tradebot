@@ -53,6 +53,7 @@ notes/
 frontend/
 frontend_legacy/
 
-# Misc scripts not required at runtime
+# Misc scripts not required at runtime (allow DB wait helper used by backend image)
 scripts/
+!scripts/wait-for-db.sh
 infrastructure/

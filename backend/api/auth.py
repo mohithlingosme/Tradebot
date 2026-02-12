@@ -1,7 +1,8 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError as JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlalchemy import select

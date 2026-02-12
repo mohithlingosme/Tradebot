@@ -1,8 +1,6 @@
-version: "3.9"
-
 services:
   timescale:
-    image: timescale/timescaledb-ha:pg16.2
+    image: timescale/timescaledb-ha:pg16
     env_file:
       - .env
     environment:
@@ -27,7 +25,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://finbot:${POSTGRES_PASSWORD}@timescale:5432/finbot
+      DATABASE_URL: postgresql+psycopg2://finbot:${POSTGRES_PASSWORD}@timescale:5432/finbot
       FRONTEND_ORIGINS: http://localhost:4173,http://frontend:80
       SECRET_KEY: ${SECRET_KEY}
     depends_on:

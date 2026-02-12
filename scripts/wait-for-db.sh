@@ -9,7 +9,7 @@ echo "Database is ready!"
 
 # Run Alembic migrations
 echo "Running Alembic migrations..."
-if alembic upgrade head; then
+if alembic upgrade heads; then
   echo "Migrations completed successfully!"
 else
   echo "Migration failed! Exiting."

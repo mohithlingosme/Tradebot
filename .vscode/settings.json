@@ -1,6 +1,10 @@
 {
     "chatgpt.openOnStartup": true,
     "chatgpt.runCodexInWindowsSubsystemForLinux": true,
+    "python.defaultInterpreterPath": "C:\\Users\\mohit\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
+    "python.analysis.extraPaths": [
+        "C:\\Users\\mohit\\AppData\\Local\\Programs\\Python\\Python311\\Lib\\site-packages"
+    ],
     "python.testing.unittestArgs": [
         "-v",
         "-s",

@@ -19,8 +19,18 @@ class OrderStatus(str, Enum):
 
 class RiskEventType(str, Enum):
     REJECT = "REJECT"
-    KILL_SWITCH = "KILL_SWITCH"
-    LIMIT_BREACH = "LIMIT_BREACH"
+    ALLOW_REDUCED = "ALLOW_REDUCED"
+    HALT = "HALT"
+    SQUAREOFF = "SQUAREOFF"
+    RESUME = "RESUME"
+
+
+class RiskAction(str, Enum):
+    ALLOW = "ALLOW"
+    REJECT = "REJECT"
+    REDUCE_QTY = "REDUCE_QTY"
+    HALT_TRADING = "HALT_TRADING"
+    FORCE_SQUARE_OFF = "FORCE_SQUARE_OFF"
 
 class EngineEventLevel(str, Enum):
     INFO = "INFO"
@@ -33,3 +43,7 @@ class EngineEventComponent(str, Enum):
     RISK = "risk"
     EXECUTION = "execution"
     INGESTION = "ingestion"
+
+class ProductType(str, Enum):
+    MIS = "MIS"
+    CNC = "CNC"

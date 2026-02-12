@@ -13,9 +13,22 @@ DEFAULT_SQLITE_DB = REPO_ROOT / "finbot.db"
 DEFAULT_DATABASE_URL = f"sqlite+aiosqlite:///{DEFAULT_SQLITE_DB.as_posix()}"
 
 
+def ensure_async_database_url(url: str) -> str:
+    """Normalize sync URLs (sqlite/postgres) to async drivers for SQLAlchemy."""
+    if url.startswith("postgresql+asyncpg://") or url.startswith("sqlite+aiosqlite://"):
+        return url
+    if url.startswith("postgresql+psycopg2://"):
+        return url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if url.startswith("sqlite:///"):
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    return url
+
+
 async def create_user(email: str, password: str, database_url: str) -> None:
     """Create a user with the provided credentials if it does not exist."""
-    engine = create_async_engine(database_url, echo=True)
+    engine = create_async_engine(ensure_async_database_url(database_url), echo=True)
     async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     async with engine.begin() as conn:
