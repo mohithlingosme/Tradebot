@@ -7,15 +7,24 @@ Supports market, limit, and stop-loss orders.
 
 from __future__ import annotations
 
+import numpy as np
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 from common.market_data import Candle
 from .costs import CostModel
 from .instrument_master import Instrument
+
+
+@dataclass
+class LatencyConfig:
+    """Configuration for execution latency simulation."""
+    mean_latency_ms: float = 50.0
+    std_dev_ms: float = 25.0
+    seed: Optional[int] = None  # For reproducible latency in Golden Tests
 
 
 class OrderType(Enum):
@@ -70,6 +79,60 @@ class FillResult:
     status: OrderStatus = OrderStatus.FILLED
 
 
+class LatencySimulator:
+    """
+    Simulates network and execution delays using probability distributions.
+
+    Models realistic "fat-tail" execution delays with log-normal distribution.
+    """
+
+    def __init__(self, mean_latency_ms: float = 50.0, std_dev_ms: float = 25.0, seed: Optional[int] = None):
+        """
+        Initialize latency simulator.
+
+        Args:
+            mean_latency_ms: Mean latency in milliseconds
+            std_dev_ms: Standard deviation of latency
+            seed: Random seed for reproducibility
+        """
+        self.mean_latency_ms = mean_latency_ms
+        self.std_dev_ms = std_dev_ms
+        self.rng = np.random.RandomState(seed)
+
+    def simulate_latency(self) -> float:
+        """
+        Simulate execution latency using log-normal distribution.
+
+        Returns:
+            Latency in milliseconds
+        """
+        # Log-normal distribution for fat-tail delays
+        mu = np.log(self.mean_latency_ms**2 / np.sqrt(self.mean_latency_ms**2 + self.std_dev_ms**2))
+        sigma = np.sqrt(np.log(1 + (self.std_dev_ms / self.mean_latency_ms)**2))
+
+        return self.rng.lognormal(mu, sigma)
+
+    def get_time_to_fill(self, atr: Optional[float] = None, base_latency: Optional[float] = None) -> float:
+        """
+        Calculate time-to-fill incorporating volatility.
+
+        Args:
+            atr: Average True Range for volatility adjustment
+            base_latency: Override base latency
+
+        Returns:
+            Time to fill in milliseconds
+        """
+        base = base_latency or self.simulate_latency()
+
+        if atr:
+            # Increase latency for high volatility periods
+            volatility_factor = min(atr / 10.0, 5.0)  # Cap at 5x
+            base *= (1 + volatility_factor * 0.1)
+
+        return base
+
+
 class FillSimulator:
     """
     Simulates order fills with realistic execution characteristics.
@@ -80,14 +143,16 @@ class FillSimulator:
     - mid_price: Fill at mid of current bar
     """
 
-    def __init__(self, cost_model: CostModel, fill_model: str = "next_bar_open"):
+    def __init__(self, cost_model: CostModel, fill_model: str = "next_bar_open",
+                 latency_simulator: Optional[LatencySimulator] = None):
         self.cost_model = cost_model
         self.fill_model = fill_model
+        self.latency_simulator = latency_simulator or LatencySimulator()
 
     def process_market_order(self, order: BacktestOrder, current_candle: Candle,
-                           previous_candle: Optional[Candle] = None) -> FillResult:
+                           previous_candle: Optional[Candle] = None, atr: Optional[float] = None) -> FillResult:
         """
-        Process a market order.
+        Process a market order with latency and volatility-adjusted slippage.
 
         Fill model determines execution price:
         - next_bar_open: Use next candle's open
@@ -107,10 +172,19 @@ class FillSimulator:
         else:
             base_price = current_candle.close
 
-        # Apply slippage
-        fill_price = self.cost_model.price_with_slippage(
+        # Simulate time-to-fill using latency simulator
+        time_to_fill_ms = self.latency_simulator.get_time_to_fill(atr=atr)
+        fill_timestamp = current_candle.timestamp + timedelta(milliseconds=time_to_fill_ms)
+
+        # Apply volatility-adjusted slippage
+        base_price_decimal = Decimal(str(base_price))
+
+        # Enhanced slippage calculation factoring in time-to-fill and ATR
+        slippage_bps = self._calculate_volatility_slippage(time_to_fill_ms, atr or 0.0)
+        fill_price = self._apply_slippage_with_atr(
             OrderSide.BUY if order.side == OrderSide.BUY else OrderSide.SELL,
-            Decimal(str(base_price))
+            base_price_decimal,
+            slippage_bps
         )
 
         # Calculate fees
@@ -122,7 +196,7 @@ class FillSimulator:
         )
 
         # Calculate slippage amount
-        slippage = abs(fill_price - Decimal(str(base_price))) * abs(order.quantity)
+        slippage = abs(fill_price - base_price_decimal) * abs(order.quantity)
 
         return FillResult(
             order_id=order.order_id,
@@ -132,8 +206,50 @@ class FillSimulator:
             fill_price=fill_price,
             slippage=slippage,
             fees=fees,
-            timestamp=current_candle.timestamp
+            timestamp=fill_timestamp
         )
+
+    def _calculate_volatility_slippage(self, time_to_fill_ms: float, atr: float) -> float:
+        """
+        Calculate slippage in basis points based on time-to-fill and volatility.
+
+        Args:
+            time_to_fill_ms: Time to fill in milliseconds
+            atr: Average True Range
+
+        Returns:
+            Slippage in basis points
+        """
+        # Base slippage increases with time-to-fill
+        base_slippage_bps = min(time_to_fill_ms / 100.0, 50.0)  # Cap at 50bps
+
+        # Add volatility component
+        if atr > 0:
+            volatility_factor = min(atr / 10.0, 2.0)  # ATR as % of price, cap at 2x
+            base_slippage_bps *= (1 + volatility_factor)
+
+        return base_slippage_bps
+
+    def _apply_slippage_with_atr(self, side: OrderSide, base_price: Decimal, slippage_bps: float) -> Decimal:
+        """
+        Apply slippage to base price.
+
+        Args:
+            side: Buy or sell side
+            base_price: Base execution price
+            slippage_bps: Slippage in basis points
+
+        Returns:
+            Adjusted fill price
+        """
+        slippage_factor = slippage_bps / 10000.0  # Convert bps to decimal
+
+        if side == OrderSide.BUY:
+            # Buy orders get worse price (higher)
+            return base_price * (1 + Decimal(str(slippage_factor)))
+        else:
+            # Sell orders get worse price (lower)
+            return base_price * (1 - Decimal(str(slippage_factor)))
 
     def process_limit_order(self, order: BacktestOrder, current_candle: Candle,
                           previous_candle: Optional[Candle] = None) -> Optional[FillResult]:
@@ -191,7 +307,7 @@ class FillSimulator:
         )
 
     def process_stop_order(self, order: BacktestOrder, current_candle: Candle,
-                         previous_candle: Optional[Candle] = None) -> Optional[FillResult]:
+                         previous_candle: Optional[Candle] = None, atr: Optional[float] = None) -> Optional[FillResult]:
         """
         Process a stop-loss order.
 
@@ -218,7 +334,7 @@ class FillSimulator:
 
         # For stop-loss-market, fill at market
         if order.order_type == OrderType.STOP_LOSS_MARKET:
-            return self.process_market_order(order, current_candle, previous_candle)
+            return self.process_market_order(order, current_candle, previous_candle, atr)
         else:
             # For regular stop-loss, fill at stop price (treated as limit)
             order.price = stop_price

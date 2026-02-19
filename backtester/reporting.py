@@ -64,6 +64,12 @@ class PerformanceMetrics:
     payoff_ratio: float = 0.0
     kelly_criterion: float = 0.0
 
+    # Additional metrics (already implemented above)
+    cagr: float = 0.0
+    expectancy: float = 0.0
+    profit_factor: float = 0.0
+    sortino_ratio: float = 0.0
+
 
 @dataclass
 class BreakdownMetrics:
@@ -171,7 +177,7 @@ class BacktestReporter:
             parameters=parameters
         )
 
-    def _calculate_performance_metrics(self) -> PerformanceMetrics:
+    def _calculate_performance_metrics(self, risk_free_rate: float = 0.0) -> PerformanceMetrics:
         """Calculate comprehensive performance metrics."""
         equity_curve = self.portfolio.equity_curve
         trade_log = self.portfolio.trade_log
@@ -190,12 +196,14 @@ class BacktestReporter:
         total_days = (end_date - start_date).days
         trading_days = len(set(ep.timestamp.date() for ep in equity_curve))
 
+        # CAGR calculation
         if total_days > 0:
+            years = total_days / 365.0
+            cagr = ((final_equity / initial_equity) ** (1 / years) - 1) * 100
             annualized_return_pct = ((1 + total_return_pct / 100) ** (365 / total_days) - 1) * 100
-            cagr_pct = annualized_return_pct  # Simplified assumption
         else:
+            cagr = 0.0
             annualized_return_pct = 0.0
-            cagr_pct = 0.0
 
         # Daily returns for volatility and risk metrics
         daily_returns = []
@@ -211,19 +219,20 @@ class BacktestReporter:
             volatility_pct = statistics.stdev(daily_returns) * (252 ** 0.5) * 100  # Annualized
             avg_daily_return_pct = statistics.mean(daily_returns) * 100
 
-            # Sharpe ratio (assuming 0% risk-free rate for simplicity)
+            # Sharpe ratio (using risk-free rate)
+            excess_returns = [r - risk_free_rate/252 for r in daily_returns]  # Daily risk-free rate
             if volatility_pct > 0:
-                sharpe_ratio = avg_daily_return_pct / (volatility_pct / (252 ** 0.5))
+                sharpe_ratio = statistics.mean(excess_returns) / statistics.stdev(excess_returns) * (252 ** 0.5)
             else:
                 sharpe_ratio = 0.0
 
-            # Sortino ratio (downside deviation)
-            negative_returns = [r for r in daily_returns if r < 0]
-            if negative_returns:
-                downside_dev = statistics.stdev(negative_returns) * (252 ** 0.5)
-                sortino_ratio = avg_daily_return_pct / downside_dev if downside_dev > 0 else 0.0
+            # Sortino ratio (downside deviation only, using risk-free rate)
+            downside_returns = [r - risk_free_rate/252 for r in daily_returns if r < risk_free_rate/252]
+            if downside_returns:
+                downside_dev = statistics.stdev(downside_returns) * (252 ** 0.5)
+                sortino_ratio = statistics.mean(excess_returns) / downside_dev if downside_dev > 0 else 0.0
             else:
-                sortino_ratio = float('inf') if avg_daily_return_pct > 0 else 0.0
+                sortino_ratio = float('inf') if statistics.mean(excess_returns) > 0 else 0.0
 
             best_day_pct = max(daily_returns) * 100
             worst_day_pct = min(daily_returns) * 100
@@ -264,10 +273,10 @@ class BacktestReporter:
             largest_win = max(winning_pnls) if winning_pnls else 0.0
             largest_loss = min(losing_pnls) if losing_pnls else 0.0
 
-            # Expectancy
+            # Expectancy (average win/loss per trade)
             win_prob = len(winning_pnls) / total_trades if total_trades > 0 else 0
             loss_prob = len(losing_pnls) / total_trades if total_trades > 0 else 0
-            expectancy = (win_prob * avg_win) + (loss_prob * avg_loss)
+            expectancy = (win_prob * avg_win) - (loss_prob * avg_loss)
 
             # Payoff ratio
             payoff_ratio = avg_win / abs(avg_loss) if avg_loss != 0 else float('inf')
@@ -294,7 +303,7 @@ class BacktestReporter:
         return PerformanceMetrics(
             total_return_pct=total_return_pct,
             annualized_return_pct=annualized_return_pct,
-            cagr_pct=cagr_pct,
+            cagr=cagr,
             volatility_pct=volatility_pct,
             max_drawdown_pct=max_drawdown_pct,
             sharpe_ratio=sharpe_ratio,

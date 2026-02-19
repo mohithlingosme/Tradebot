@@ -28,6 +28,7 @@ from risk.risk_engine import RiskEngine
 from .config import BacktestConfig
 from .costs import CostModel
 from .reporting import BacktestReport, build_performance_report, plot_equity_curve
+from .risk_manager import BacktestRiskManager, RiskLimits
 from .simulator import TradeSimulator
 
 MarketEvent = Union[Bar, Tick]
@@ -253,7 +254,7 @@ class EventBacktester:
         config: BacktestConfig,
         strategies: Sequence[Strategy],
         cost_model: CostModel | None = None,
-        risk_manager: RiskManager | None = None,
+        risk_manager: BacktestRiskManager | None = None,
         position_sizer: PositionSizer | None = None,
     ):
         self.config = config
@@ -265,7 +266,12 @@ class EventBacktester:
             fee_per_unit=config.fee_per_unit,
         )
         self.position_sizer = position_sizer or config.position_sizer or PositionSizer()
-        self.risk_manager = risk_manager or RiskManager(config.risk_limits)
+        # Use BacktestRiskManager with default RiskLimits if not provided
+        if risk_manager is None:
+            limits = RiskLimits()  # Default limits
+            self.risk_manager = BacktestRiskManager(limits)
+        else:
+            self.risk_manager = risk_manager
 
         portfolio = PortfolioState(cash=config.initial_capital, daily_start_equity=config.initial_capital)
         self.simulator = TradeSimulator(self.cost_model, portfolio=portfolio)
@@ -328,16 +334,48 @@ class EventBacktester:
         self, strategy_name: str, signals: Sequence[Signal], price: float, execution_bar: Bar
     ) -> List[OrderFill]:
         fills: List[OrderFill] = []
+        rejected_signals = []  # Track rejected signals for reporting
+
         for signal in signals:
             order = self._signal_to_order(signal, price, strategy_name)
             if order is None:
                 continue
-            decision = self.risk_manager.evaluate(order, self.simulator.portfolio, order.limit_price or price)
-            if decision.decision == RiskDecisionType.REJECT or decision.order is None:
+
+            # Get ATR from strategy indicators for position sizing
+            atr = None
+            if hasattr(self.strategies[strategy_name], 'get_indicator'):
+                try:
+                    atr = self.strategies[strategy_name].get_indicator(signal.symbol, 'atr_14', [])
+                except:
+                    pass  # ATR not available, use default sizing
+
+            # Evaluate order with risk manager (now includes position sizing)
+            backtest_order = self._order_request_to_backtest_order(order, price)
+            decision = self.risk_manager.evaluate_order(
+                backtest_order, self.simulator.portfolio, execution_bar.timestamp, Decimal(str(price)), atr
+            )
+
+            if decision.action == RiskDecisionType.REJECT:
+                rejected_signals.append({
+                    'signal': signal,
+                    'reason': decision.reason,
+                    'timestamp': execution_bar.timestamp
+                })
                 continue
+            elif decision.action == RiskDecisionType.HALT_TRADING:
+                # Trading halted, stop processing signals for this bar
+                break
+
+            # Execute the approved order
             final_order = decision.order
             fill = self.simulator.execute(final_order, execution_bar)
             fills.append(fill)
+
+        # Store rejected signals for reporting (could be added to BacktestReport)
+        if rejected_signals:
+            # For now, just log them; in full implementation, add to report
+            pass
+
         return fills
 
     def _signal_to_order(self, signal: Signal, price: float, strategy_name: str) -> OrderRequest | None:
@@ -380,6 +418,20 @@ class EventBacktester:
             low=tick.price,
             close=tick.price,
             volume=tick.size,
+        )
+
+    def _order_request_to_backtest_order(self, order: OrderRequest, price: float):
+        """Convert OrderRequest to BacktestOrder for risk evaluation."""
+        from .fill_simulator import BacktestOrder, OrderSide as BOOrderSide, OrderType as BOOrderType
+        side = BOOrderSide.BUY if order.side == OrderSide.BUY else BOOrderSide.SELL
+        order_type = BOOrderType.MARKET if order.order_type == OrderType.MARKET else BOOrderType.LIMIT
+        return BacktestOrder(
+            order_id=f"{order.strategy_name}_{order.symbol}_{order.timestamp.isoformat()}" if hasattr(order, 'timestamp') else f"{order.strategy_name}_{order.symbol}",
+            symbol=order.symbol,
+            side=side,
+            order_type=order_type,
+            quantity=order.quantity,
+            price=price if order_type == BOOrderType.LIMIT else None,
         )
 
     @staticmethod

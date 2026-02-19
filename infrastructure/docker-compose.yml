@@ -5,10 +5,12 @@ services:
   db:
     image: postgres:13
     container_name: finbot_postgres
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: market_data
-      POSTGRES_USER: finbot
-      POSTGRES_PASSWORD: finbot123
+      POSTGRES_DB: ${POSTGRES_DB:-market_data}
+      POSTGRES_USER: ${POSTGRES_USER:-finbot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -52,7 +54,9 @@ services:
     volumes:
       - ./backend:/app
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://finbot:finbot123@db:5432/market_data}
+      DATABASE_URL: ${DATABASE_URL}
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
@@ -77,18 +81,20 @@ services:
     container_name: finbot_market_data_dev
     volumes:
       - .:/app
-    ports:
-      - "8001:8001"
-      - "8080:8080"
-      - "9090:9090"
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://finbot:finbot123@db:5432/market_data
+      DATABASE_URL: ${DATABASE_URL}
       ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY}
       KITE_API_KEY: ${KITE_API_KEY}
       KITE_API_SECRET: ${KITE_API_SECRET}
       LOG_LEVEL: INFO
       APP_ENV: development
       APP_PORT: 8001
+    ports:
+      - "8001:8001"
+      - "8080:8080"
+      - "9090:9090"
     depends_on:
       db:
         condition: service_healthy

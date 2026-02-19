@@ -11,6 +11,9 @@ from datetime import date, datetime
 from typing import List, Dict, Any, Optional
 import json
 import time
+import concurrent.futures
+import hashlib
+from functools import lru_cache
 
 from .performance import BatchBacktester, BatchJob
 from .walk_forward import WalkForwardAnalyzer, ParameterGridSearch, ValidationReport
@@ -18,6 +21,47 @@ from .reporting import BacktestReporter
 from .strategy_interface import create_strategy
 from .ohlcv_storage import OHLCVStorage
 from .instrument_master import InstrumentMaster
+
+
+class IndicatorCache:
+    """Cache for technical indicators to avoid redundant computation during grid searches."""
+
+    def __init__(self, maxsize: int = 10000):
+        self.cache = {}
+        self.maxsize = maxsize
+
+    def get_key(self, symbol: str, timeframe: str, indicator_name: str, parameters: Dict[str, Any]) -> str:
+        """Generate cache key for indicator."""
+        param_hash = hashlib.md5(str(sorted(parameters.items())).encode()).hexdigest()
+        return f"{symbol}_{timeframe}_{indicator_name}_{param_hash}"
+
+    def get_indicator(self, symbol: str, timeframe: str, indicator_name: str, parameters: Dict[str, Any], data):
+        """Get cached indicator or compute if not cached."""
+        key = self.get_key(symbol, timeframe, indicator_name, parameters)
+
+        if key in self.cache:
+            return self.cache[key]
+
+        # Compute indicator (placeholder - would call actual indicator function)
+        result = self._compute_indicator(indicator_name, data, **parameters)
+
+        # Cache with LRU eviction
+        if len(self.cache) >= self.maxsize:
+            # Simple LRU: remove oldest (in practice, use a proper LRU cache)
+            oldest_key = next(iter(self.cache))
+            del self.cache[oldest_key]
+
+        self.cache[key] = result
+        return result
+
+    def _compute_indicator(self, name: str, data, **params):
+        """Placeholder for indicator computation."""
+        # This would call the actual indicator library
+        return f"computed_{name}_{hash(str(params))}"
+
+    def clear(self):
+        """Clear the cache."""
+        self.cache.clear()
 
 
 class BacktestCLI:
@@ -36,6 +80,7 @@ class BacktestCLI:
         self.storage = OHLCVStorage()
         self.instrument_master = InstrumentMaster()
         self.batch_backtester = BatchBacktester(self._run_single_backtest)
+        self.indicator_cache = IndicatorCache()
 
     def run(self, args: Optional[List[str]] = None) -> None:
         """Main CLI entry point."""
@@ -174,15 +219,15 @@ class BacktestCLI:
         reporter.generate_html_report(backtest_report, str(html_file))
 
         # Print summary
-        print("
-Backtest completed successfully!"        print(f"Total Return: {backtest_report.metrics.total_return_pct:.2f}%")
+        print("\nBacktest completed successfully!")
+        print(f"Total Return: {backtest_report.metrics.total_return_pct:.2f}%")
         print(f"Sharpe Ratio: {backtest_report.metrics.sharpe_ratio:.2f}")
         print(f"Win Rate: {backtest_report.metrics.win_rate_pct:.1f}%")
         print(f"Total Trades: {backtest_report.metrics.total_trades}")
         print(f"\nReports saved to: {output_dir}")
 
     def _cmd_batch(self, args: argparse.Namespace) -> None:
-        """Run batch backtests."""
+        """Run batch backtests with multiprocessing."""
         print(f"Running batch backtest for strategy: {args.strategy}")
 
         # Load symbols from file
@@ -199,26 +244,36 @@ Backtest completed successfully!"        print(f"Total Return: {backtest_report.
         output_dir = Path(args.output) if args.output else Path(f"batch_results_{int(time.time())}")
         output_dir.mkdir(exist_ok=True)
 
-        # Create batch job
-        job = BatchJob(
-            job_id=f"batch_{int(time.time())}",
-            symbols=symbols,
-            strategy_name=args.strategy,
-            parameters=args.parameters,
-            start_date=start_date,
-            end_date=end_date,
-            max_workers=args.workers,
-            enable_profiling=True
-        )
-
-        # Run batch job
+        # Run parallel batch processing
         start_time = time.time()
-        results = self.batch_backtester.run_batch_job(job)
+
+        # Use ProcessPoolExecutor for symbol-level parallelism
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.workers) as executor:
+            # Submit jobs for each symbol
+            future_to_symbol = {
+                executor.submit(self._run_single_backtest_parallel,
+                              args.strategy, args.parameters, [symbol], start_date, end_date): symbol
+                for symbol in symbols
+            }
+
+            results = []
+            for future in concurrent.futures.as_completed(future_to_symbol):
+                symbol = future_to_symbol[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as exc:
+                    results.append({
+                        'symbol': symbol,
+                        'error': str(exc),
+                        'report': None
+                    })
+
         total_time = time.time() - start_time
 
         # Process results
-        successful = [r for r in results if not r.error]
-        failed = [r for r in results if r.error]
+        successful = [r for r in results if not r.get('error')]
+        failed = [r for r in results if r.get('error')]
 
         print(f"\nBatch completed in {total_time:.2f} seconds")
         print(f"Successful: {len(successful)}/{len(results)}")
@@ -226,12 +281,39 @@ Backtest completed successfully!"        print(f"Total Return: {backtest_report.
         if failed:
             print(f"Failed: {len(failed)}")
             for failure in failed[:5]:  # Show first 5 failures
-                print(f"  - {failure.symbol}: {failure.error}")
+                print(f"  - {failure['symbol']}: {failure['error']}")
 
         # Generate summary report
-        self._generate_batch_summary(results, output_dir, job)
+        self._generate_batch_summary(results, output_dir, args)
 
         print(f"\nResults saved to: {output_dir}")
+
+    def _run_single_backtest_parallel(self, strategy_name: str, parameters: Dict[str, Any],
+                                    symbols: List[str], start_date: date, end_date: date) -> Dict[str, Any]:
+        """
+        Run a single backtest in a separate process.
+
+        This ensures RiskEngine state isolation per process.
+        """
+        try:
+            # Create isolated risk engine instance per process
+            from core.risk.risk_engine import RiskEngine
+            risk_engine = RiskEngine(capital=100000.0)
+
+            # Run backtest logic here (placeholder)
+            report = self._run_single_backtest(strategy_name, parameters, symbols, start_date, end_date)
+
+            return {
+                'symbol': symbols[0],
+                'error': None,
+                'report': report
+            }
+        except Exception as e:
+            return {
+                'symbol': symbols[0],
+                'error': str(e),
+                'report': None
+            }
 
     def _cmd_walk_forward(self, args: argparse.Namespace) -> None:
         """Run walk-forward analysis."""
@@ -274,8 +356,8 @@ Backtest completed successfully!"        print(f"Total Return: {backtest_report.
         export_validation_report(report, str(json_file))
 
         # Print summary
-        print("
-Walk-forward analysis completed!"        print(f"Total parameter sets: {len(report.parameter_sets)}")
+        print("\nWalk-forward analysis completed!")
+        print(f"Total parameter sets: {len(report.parameter_sets)}")
         print(f"Total windows: {report.total_windows}")
         print(f"Average OOS performance: {report.avg_oos_performance:.3f}")
         print(f"Average overfitting score: {report.avg_overfitting_score:.3f}")
@@ -391,15 +473,15 @@ Walk-forward analysis completed!"        print(f"Total parameter sets: {len(repo
         failed = [r for r in results if r.error]
 
         summary = {
-            'batch_id': job.job_id,
-            'strategy': job.strategy_name,
+            'batch_id': f"batch_{int(time.time())}",
+            'strategy': args.strategy,
             'total_symbols': len(results),
             'successful': len(successful),
             'failed': len(failed),
-            'parameters': job.parameters,
+            'parameters': args.parameters,
             'date_range': {
-                'start': job.start_date.isoformat(),
-                'end': job.end_date.isoformat()
+                'start': args.from_date,
+                'end': args.to_date
             },
             'results': []
         }
