@@ -57,7 +57,7 @@ jobs:
 
       # Publish Python distributions for downstream jobs and releases
       - name: Upload Python artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: finbot-python-dist
           path: dist/*
@@ -95,7 +95,7 @@ jobs:
         run: echo "${{ steps.build-image.outputs.digest }}" > docker-image-digest.txt
 
       - name: Upload Docker metadata
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: finbot-docker-digest
           path: docker-image-digest.txt
