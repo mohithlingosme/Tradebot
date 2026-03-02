@@ -18,7 +18,7 @@ jobs:
       - name: Generate project report
         run: python infrastructure/scripts/project_report.py --output reports/project-status.md
       - name: Upload report artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: project-status-report
           path: reports/project-status.md
